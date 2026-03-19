@@ -29,6 +29,8 @@ template <> constexpr bool c2py::is_wrapped<triqs_xca::block_sparse::DiagramEval
 template <> inline constexpr auto c2py::tp_name<triqs_xca::block_sparse::DiagramEvaluator> = "triqs_xca.module.DiagramEvaluator";
 static auto init_0                                                                         = c2py::dispatcher_c_kw_t{
    c2py::c_constructor<triqs_xca::block_sparse::DiagramEvaluator, nda::vector_const_view<double>, nda::array_const_view<nda::dcomplex, 3>,
+                                                                                               triqs::mesh::dlr_imtime, const triqs::atom_diag::atom_diag<1> &>("hyb_poles", "hyb_coeffs", "tau_mesh", "ad"),
+   c2py::c_constructor<triqs_xca::block_sparse::DiagramEvaluator, nda::vector_const_view<double>, nda::array_const_view<nda::dcomplex, 3>,
                                                                                                triqs::mesh::dlr_imtime, const triqs::atom_diag::atom_diag<0> &>("hyb_poles", "hyb_coeffs", "tau_mesh", "ad")};
 template <> constexpr initproc c2py::tp_init<triqs_xca::block_sparse::DiagramEvaluator> = c2py::pyfkw_constructor<init_0>;
 template <>
@@ -59,7 +61,7 @@ ad : {par_6}
                {c2py::python_typename<nda::vector_const_view<double>>()},
                {c2py::python_typename<nda::array_const_view<nda::dcomplex, 3>>()},
                {},
-               {c2py::python_typename<const triqs::atom_diag::atom_diag<0> &>()}});
+               {c2py::python_typename<const triqs::atom_diag::atom_diag<1> &>()}});
 // compute_self_energy
 static auto const fun_0 = c2py::dispatcher_f_kw_t{
    c2py::cmethod([](triqs_xca::block_sparse::DiagramEvaluator &self, triqs::gfs::block_gf_view<triqs::mesh::dlr_imtime> G_ppsc,
