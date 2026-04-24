@@ -27,10 +27,12 @@ jobs:
       matrix:
         include:
           #- {os: ubuntu-24.04, cxx: g++,         clang_cxx: clang++-19}
-          - {os: ubuntu-24.04, cxx: clang++-20,  clang_cxx: clang++-20}
-          - {os: ubuntu-24.04-arm, cxx: clang++-20,  clang_cxx: clang++-20}
+          - {os: ubuntu-24.04, cxx: clang++-20,  clang_cxx: clang++-20, blas: openblas}
+          - {os: ubuntu-24.04, cxx: clang++-20,  clang_cxx: clang++-20, blas: atlas}
+          - {os: ubuntu-24.04, cxx: clang++-20,  clang_cxx: clang++-20, blas: system}
+          - {os: ubuntu-24.04-arm, cxx: clang++-20,  clang_cxx: clang++-20, blas: openblas}
           #- {os: macos-15,     cxx: g++-15,      clang_cxx: clang++}
-          - {os: macos-15,     cxx: clang++,     clang_cxx: clang++}
+          - {os: macos-15,     cxx: clang++,     clang_cxx: clang++, blas: openblas}
 
     runs-on: ${{ matrix.os }}
 
@@ -76,7 +78,6 @@ jobs:
         libgfortran5
         libgmp-dev
         libhdf5-dev
-        libopenblas-dev
         libopenmpi-dev
         openmpi-bin
         openmpi-common
@@ -91,6 +92,14 @@ jobs:
         python3-pip
         python3-scipy
         python3-ipython
+
+    - name: Install Atlas on Ubuntu
+      if: ${{ contains(matrix.os, 'ubuntu') && matrix.blas == 'atlas' }}
+      run: sudo apt-get install libatlas-base-dev
+
+    - name: Install OpenBLAS on Ubuntu
+      if: ${{ contains(matrix.os, 'ubuntu') && matrix.blas == 'openblas' }}
+      run: sudo apt-get install libopenblas-dev
 
     - name: Install ubuntu cvxpy dependency using pip
       if: ${{ contains(matrix.os, 'ubuntu') }}
