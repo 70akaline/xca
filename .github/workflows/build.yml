@@ -93,6 +93,10 @@ jobs:
         python3-scipy
         python3-ipython
 
+    - name: Install Blas/Lapack on Ubuntu
+      if: ${{ contains(matrix.os, 'ubuntu') && matrix.blas == 'system' }}
+      run: sudo apt-get install libblas-dev liblapack-dev
+
     - name: Install Atlas on Ubuntu
       if: ${{ contains(matrix.os, 'ubuntu') && matrix.blas == 'atlas' }}
       run: sudo apt-get install libatlas-base-dev
