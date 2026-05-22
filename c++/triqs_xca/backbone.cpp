@@ -207,6 +207,14 @@ void Backbone::set_flat_index(int flat_ix, nda::vector_const_view<double> hyb_po
   set_orb_inds(o_ix);
 }
 
+void Backbone::reverse_hyb_line_zero() {
+  // reverse the direction of the hybridization line connected to vertex 0
+  fb(0) = 1 - fb(0); // flip direction (0 to 1 or 1 to 0)
+  int vct0 = topology(0, 1); // vertex connected to vertex 0
+  vertices[0].set_dag(!vertices[0].has_dag()); // flip dag flag on vertex 0
+  vertices[vct0].set_dag(!vertices[vct0].has_dag()); // flip dag flag on vertex connected to vertex 0
+}
+
 void Backbone::reset_all_inds() {
   reset_directions();
   reset_pole_inds();

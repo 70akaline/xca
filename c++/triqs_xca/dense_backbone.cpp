@@ -1,3 +1,4 @@
+#include <cppdlr/utils.hpp>
 #include <nda/nda.hpp>
 
 #include <cppdlr/dlr_imtime.hpp>
@@ -35,7 +36,7 @@ namespace triqs_xca::dense {
        Tkaps(nda::zeros<dcomplex>(n, r, N, N)), // Largest memory footprint, speeding up multiply_left_vertex_and_right_zero_vertex
        Tmu(nda::zeros<dcomplex>(r, N, N)) {}
 
-  template<bool isComplex>
+  template <bool isComplex>
   DenseDiagramEvaluator::DenseDiagramEvaluator(nda::vector_const_view<double> hyb_poles, nda::array_const_view<dcomplex, 3> hyb_coeffs,
                                                triqs::mesh::dlr_imtime tau_mesh, triqs::atom_diag::atom_diag<isComplex> const &ad)
      : tau_mesh(tau_mesh),
@@ -55,17 +56,11 @@ namespace triqs_xca::dense {
        Tkaps(nda::zeros<dcomplex>(n, r, N, N)), // Largest memory footprint, speeding up multiply_left_vertex_and_right_zero_vertex
        Tmu(nda::zeros<dcomplex>(r, N, N)) {}
 
-  template DenseDiagramEvaluator::DenseDiagramEvaluator(
-    nda::vector_const_view<double> hyb_poles,
-    nda::array_const_view<dcomplex, 3> hyb_coeffs,
-    triqs::mesh::dlr_imtime tau_mesh,
-    triqs::atom_diag::atom_diag<true> const &ad);
+  template DenseDiagramEvaluator::DenseDiagramEvaluator(nda::vector_const_view<double> hyb_poles, nda::array_const_view<dcomplex, 3> hyb_coeffs,
+                                                        triqs::mesh::dlr_imtime tau_mesh, triqs::atom_diag::atom_diag<true> const &ad);
 
-  template DenseDiagramEvaluator::DenseDiagramEvaluator(
-    nda::vector_const_view<double> hyb_poles,
-    nda::array_const_view<dcomplex, 3> hyb_coeffs,
-    triqs::mesh::dlr_imtime tau_mesh,
-    triqs::atom_diag::atom_diag<false> const &ad);
+  template DenseDiagramEvaluator::DenseDiagramEvaluator(nda::vector_const_view<double> hyb_poles, nda::array_const_view<dcomplex, 3> hyb_coeffs,
+                                                        triqs::mesh::dlr_imtime tau_mesh, triqs::atom_diag::atom_diag<false> const &ad);
 
   void DenseDiagramEvaluator::reset() {
     T     = 0;
@@ -98,6 +93,24 @@ namespace triqs_xca::dense {
     Backbone backbone(topology, n);
     for (int f_ix : f_ix_vec)
       eval_self_energy_fixed_indices(G_ppsc[0].data(), backbone, f_ix); // evaluate the diagram with these directions, poles, and orbital indices
+    auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
+    reset();
+    return std::vector{sigma_gf};
+  }
+
+  triqs::gfs::block_gf<triqs::mesh::dlr_imtime> DenseDiagramEvaluator::compute_self_energy_by_pairs(gf_vt G_ppsc,
+                                                                                                    nda::array_const_view<int, 2> topology) {
+    Backbone backbone(topology, n);
+    eval_self_energy_by_pairs(G_ppsc[0].data(), backbone);
+    auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
+    reset();
+    return std::vector{sigma_gf};
+  }
+
+  triqs::gfs::block_gf<triqs::mesh::dlr_imtime>
+  DenseDiagramEvaluator::compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, int f_ix) {
+    Backbone backbone(topology, n);
+    eval_self_energy_fixed_index_pair(G_ppsc[0].data(), backbone, f_ix);
     auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
     reset();
     return std::vector{sigma_gf};
@@ -168,6 +181,15 @@ namespace triqs_xca::dense {
     }
   }
 
+  void DenseDiagramEvaluator::eval_self_energy_by_pairs(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone) {
+    // loop over flat indices in pairs that differ only in the direction of the hybridization line connected to the zero vertex
+    int f_ix_max = get_num_self_energy_backbones(backbone);
+    for (int f_ix = 0; f_ix < f_ix_max; f_ix += 2) { // TODO check that these are the correct indices
+      // evaluate one diagram together with the diagram with opposite direction on the line connected to zero
+      eval_self_energy_fixed_index_pair(Gt, backbone, f_ix);
+    }
+  }
+
   void DenseDiagramEvaluator::eval_self_energy_fixed_indices(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone, int f_ix) {
     int m    = backbone.m;
     int vct0 = backbone.get_topology(0, 1); // Vertex Connected To zero
@@ -186,7 +208,6 @@ namespace triqs_xca::dense {
     // 2. For each kappa, multiply by F_kappa(^dag). Then for each mu, kappa, multiply by Delta_{mu kappa}, and sum over kappa. Finally for each mu,
     // multiply F_mu[^dag] and sum over mu.
     multiply_left_vertex_and_right_zero_vertex(T, backbone, vct0);
-
     // 3. Continue right to left until the final vertex multiplication is complete.
     for (int v = vct0 + 1; v < 2 * m; v++) { // loop from the special vertex to the last vertex
       integrate_left_edge(T, Gt, backbone, v - 1);
@@ -200,6 +221,43 @@ namespace triqs_xca::dense {
     Sigma += T;
 
     backbone.reset_all_inds(); // reset directions, pole indices, and orbital indices for the next iteration
+  }
+
+  void DenseDiagramEvaluator::eval_self_energy_fixed_index_pair(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone, int f_ix) {
+
+    int m    = backbone.m;
+    int vct0 = backbone.get_topology(0, 1); // Vertex Connected To zero
+
+    backbone.set_flat_index(f_ix, hyb.poles);
+
+    // compute right-hand side of both diagrams in the pair
+    T = Gt;
+    // loop from the first vertex to before the special vertex
+    for (int v = 1; v < vct0; v++) {
+      multiply_left_vertex(T, backbone, v);
+      integrate_left_edge(T, Gt, backbone, v);
+    }
+    // copy to use result for both diagrams in the pair
+    U(_, _, _) = T(_, _, _);
+    multiply_left_vertex_and_right_zero_vertex(T, backbone, vct0);
+    // switch to other diagram
+    backbone.reverse_hyb_line_zero();
+    multiply_left_vertex_and_right_zero_vertex(U, backbone, vct0);
+    // switch back
+    backbone.reverse_hyb_line_zero();
+    // add contributions from the two diagrams in the pair
+    T = T - U; // TODO check sign
+
+    for (int v = vct0 + 1; v < 2 * m; v++) {
+      integrate_left_edge(T, Gt, backbone, v - 1);
+      multiply_left_vertex(T, backbone, v);
+    }
+
+    multiply_prefactor(T, backbone);
+    int diag_order_sign = (m % 2 == 0) ? -1 : 1;
+    if (backbone.get_fb(0) == 0) diag_order_sign *= -1; // if the first hybridization line is backward, there is an additional sign change
+    T *= diag_order_sign * backbone.prefactor_sign;
+    Sigma += T;
   }
 
   void DenseDiagramEvaluator::multiply_right_vertex(nda::array_view<dcomplex, 3> U_buf, Backbone &backbone, int v_ix) {
@@ -316,7 +374,8 @@ namespace triqs_xca::dense {
     return eval_correlator(G_ppsc[0].data(), backbone, mu_ops, kap_ops, f_ix);
   }
 
-  nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_single_ptcle_gf(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec) {
+  nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_single_ptcle_gf(gf_vt G_ppsc, nda::array_const_view<int, 2> topology,
+                                                                         nda::array_const_view<int, 1> f_ix_vec) {
     CorrelatorBackbone backbone(topology, n);
     auto mu_ops  = Fset.Fs;
     auto kap_ops = Fset.F_dags;
@@ -329,13 +388,10 @@ namespace triqs_xca::dense {
 
     nda::array<dcomplex, 3> correlator = nda::zeros<dcomplex>(r, mu_ops.extent(0), kap_ops.extent(0));
 
-    for (auto f_ix : f_ix_vec) {
-      correlator += eval_correlator(G_ppsc[0].data(), backbone, mu_ops, kap_ops, f_ix);
-    }
+    for (auto f_ix : f_ix_vec) { correlator += eval_correlator(G_ppsc[0].data(), backbone, mu_ops, kap_ops, f_ix); }
 
     return correlator;
   }
-  
   template<bool isComplex>
   nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_one_time_correlator(gf_vt G_ppsc, 
       std::vector<triqs::operators::many_body_operator_real> const & ops_tau, 
