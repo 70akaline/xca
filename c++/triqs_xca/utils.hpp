@@ -20,6 +20,7 @@
  ******************************************************************************/
 
 #include <cstdint>
+#include <type_traits>
 
 // https://en.wikipedia.org/wiki/Exponentiation_by_squaring
 
@@ -33,6 +34,11 @@ static constexpr inline int64_t pown(int64_t x, unsigned p) {
     p >>= 1;
   }
   return result;
+}
+
+template <typename Int>
+static constexpr inline int64_t pown(Int x, unsigned p) requires (std::is_integral_v<Int> && !std::is_same_v<std::decay_t<Int>, int64_t>) {
+  return pown(static_cast<int64_t>(x), p);
 }
 
 } // namespace triqs_xca::utils
