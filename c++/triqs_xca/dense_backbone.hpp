@@ -51,7 +51,8 @@ namespace triqs_xca::dense {
 
     nda::array<dcomplex, 3> Sigma; // array for storing self-energy contribution (final result)
     nda::array<dcomplex, 3> T;     // array for storing intermediate result
-    nda::array<dcomplex, 3> U;     // array for storing intermediate result (left side of correlator diagram)
+    nda::array<dcomplex, 3> U;     // array for storing intermediate result
+    // (right side of self-energy diagram when computing direction pairs / left side of correlator diagram)
     nda::array<dcomplex, 3> GKt;   // array for storing result of edge computation
     nda::array<dcomplex, 4> Tkaps; // intermediate storage array
     nda::array<dcomplex, 3> Tmu;   // intermediate storage array
@@ -86,15 +87,24 @@ namespace triqs_xca::dense {
     C2PY_IGNORE void eval_self_energy(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone);
     // evaluate a diagram with fixed orbital indices, poles, and line directions in dense storage, including prefactor
     C2PY_IGNORE void eval_self_energy_fixed_indices(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone, int f_ix);
+    // same as above, but evaluate diagrams that differ in hybridization direction in the line connected to the zero vertex
+    C2PY_IGNORE void eval_self_energy_fixed_index_pair(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone, int f_ix);
+    // evaluate all self-energy backbones but use the method above to evaluate pairs together
+    C2PY_IGNORE void eval_self_energy_by_pairs(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone);
     // get number of backbones for given topology
     C2PY_IGNORE int get_num_self_energy_backbones(Backbone &backbone);
 
-    triqs::gfs::block_gf<triqs::mesh::dlr_imtime>
-    compute_self_energy(gf_vt G_ppsc, nda::array_const_view<int, 2> topology); // compute self-energy for given topology
-    triqs::gfs::block_gf<triqs::mesh::dlr_imtime> compute_self_energy(gf_vt G_ppsc, nda::array_const_view<int, 2> topology,
-                                                                      int f_ix); // compute self-energy for given topology and flat index
-    triqs::gfs::block_gf<triqs::mesh::dlr_imtime> compute_self_energy(gf_vt G_ppsc, nda::array_const_view<int, 2> topology,
-                                                                      nda::array_const_view<int, 1> f_ix_vec); // compute self-energy for given topology and flat index vector
+    // compute self-energy for given topology
+    gf_t compute_self_energy(gf_vt G_ppsc, nda::array_const_view<int, 2> topology);
+    // compute self-energy for given topology and flat index
+    gf_t compute_self_energy(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, int f_ix);
+    // compute self-energy for given topology and flat index vector
+    gf_t compute_self_energy(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec);
+    // compute self-energy for given topology by pairs of diagrams
+    gf_t compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology);
+    // compute self-energy for a given topology and flat index, together with the diagram with opposite direction on the line connected to zero
+    gf_t compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, int f_ix);
+
     // get number of backbones for given topology
     int get_num_self_energy_backbones(nda::array_const_view<int, 2> topology);
 
@@ -134,7 +144,7 @@ namespace triqs_xca::dense {
        * @param[in] tau_mesh TRIQS imagnary time DLR mesh
        * @param[in] ad TRIQS atom_diag object with Hamiltonian and field operators
        */
-    template<bool isComplex>
+    template <bool isComplex>
     DenseDiagramEvaluator(nda::vector_const_view<double> hyb_poles, nda::array_const_view<dcomplex, 3> hyb_coeffs, triqs::mesh::dlr_imtime tau_mesh,
                           triqs::atom_diag::atom_diag<isComplex> const &ad);
 

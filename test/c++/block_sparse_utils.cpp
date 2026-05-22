@@ -1,3 +1,4 @@
+#include <cppdlr/dlr_build.hpp>
 #include <triqs/operators/many_body_operator.hpp>
 
 #include "block_sparse_utils.hpp"
@@ -73,6 +74,46 @@ FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps
   auto G_bdof = BlockDiagOpFun(G_ppsc);
 
   return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc = G_ppsc, .G_bdof = G_bdof};
+}
+
+DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda, double eps, double hyb_pole) {
+  // Helper function for setting up one-fermion tests with H = 0 and one-pole hybridization, with dense storage for the non-interacting propagators.
+
+  int p    = 1;
+  int norb = 1;
+  nda::array<dcomplex, 3> hyb_coeffs(p, norb, norb);
+  hyb_coeffs = 1.0;
+
+  nda::vector<double> hyb_poles(p);
+  hyb_poles = hyb_pole;
+
+  using triqs::operators::many_body_operator_complex;
+  using triqs::operators::n;
+  many_body_operator_complex H;
+  double mu = 0.0;
+  many_body_operator_complex N;
+  N = n("0", 0);
+  H = -mu * N;
+
+  triqs::atom_diag::fundamental_operator_set fop_set;
+  fop_set.insert("0", 0);
+
+  auto ad                       = triqs::atom_diag::atom_diag<true>(H, fop_set);
+  auto H_dense                  = triqs_xca::atom_diag::get_full_h_atomic(ad);
+  auto dlr_rf                   = build_dlr_rf(Lambda, eps);
+  auto itops                    = imtime_ops(Lambda, dlr_rf);
+  auto const &dlr_it            = itops.get_itnodes();
+  auto dlr_it_abs               = rel2abs(dlr_it);
+  auto Gt_dense                 = Hmat_to_Gtmat(H_dense, beta, dlr_it_abs);
+  auto [Fs_dense, F_dags_dense] = triqs_xca::atom_diag::get_operators_dense(ad);
+  auto Fset_dense               = triqs_xca::atom_diag::DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
+
+  std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_block(1);
+  triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps);
+  gf_block[0] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, Gt_dense);
+  auto G_ppsc_dense = triqs::gfs::block_gf<triqs::mesh::dlr_imtime>(gf_block);
+
+  return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc_dense = G_ppsc_dense, .Fset_dense = Fset_dense};
 }
 
 nda::array<dcomplex, 3> Hmat_to_Gtmat(nda::array<dcomplex, 2> Hmat, double beta, nda::array<double, 1> dlr_it_abs) {
