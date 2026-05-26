@@ -244,10 +244,12 @@ def one_se_iter_slater_condon_bethe_half_filling(
         S.init_diagram_evaluator()
         section_times['block_sparse_solver_prep'] = perf_counter() - t_section
 
+        # self-energy evaluation by pairs of diagrams
         # comm.Barrier()
         t_start = MPI.Wtime()
         t_section = perf_counter()
         Sigma = S._BlockSparseSolver__eval_pseudo_particle_self_energy_order(S.G, order)
+        # Sigma = S.eval_pseudo_particle_self_energy_order_by_pairs(S.G, order)
         section_times['block_sparse_eval'] = perf_counter() - t_section
         # comm.Barrier()
         t_end = MPI.Wtime()

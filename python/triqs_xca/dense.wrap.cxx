@@ -92,7 +92,13 @@ static auto const _c2py_fun_1 = c2py::dispatcher_f_kw_t{
       [](_c2py_cls_0 &self, triqs_xca::dense::DenseDiagramEvaluator::gf_vt G_ppsc,
          nda::basic_array_view<const int, 2, nda::C_stride_layout, 'A', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>> topology,
          int f_ix) -> decltype(auto) { return self.compute_self_energy_by_pairs(G_ppsc, topology, f_ix); },
-      "self", "G_ppsc", "topology", "f_ix")};
+      "self", "G_ppsc", "topology", "f_ix"),
+   c2py::cmethod(
+      [](_c2py_cls_0 &self, triqs_xca::dense::DenseDiagramEvaluator::gf_vt G_ppsc,
+         nda::basic_array_view<const int, 2, nda::C_stride_layout, 'A', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>> topology,
+         nda::basic_array_view<const int, 1, nda::C_stride_layout, 'A', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>> f_ix_vec)
+         -> decltype(auto) { return self.compute_self_energy_by_pairs(G_ppsc, topology, f_ix_vec); },
+      "self", "G_ppsc", "topology", "f_ix_vec")};
 
 // compute_single_ptcle_gf
 static auto const _c2py_fun_2 = c2py::dispatcher_f_kw_t{
