@@ -100,6 +100,8 @@ namespace triqs_xca::dense {
     gf_t compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology);
     // compute self-energy for a given topology and flat index, together with the diagram with opposite direction on the line connected to zero
     gf_t compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, int f_ix);
+    // compute self-energy for a given topology and flat index vector, together with the diagram with opposite direction on the line connected to zero
+    gf_t compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec);
 
     // get number of backbones for given topology
     int get_num_self_energy_backbones(nda::array_const_view<int, 2> topology);

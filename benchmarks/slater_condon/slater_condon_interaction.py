@@ -101,4 +101,3 @@ if __name__ == '__main__':
     solve_slater_condon_bethe_half_filling(l=0, Fs=[3.0], **opts)
     solve_slater_condon_bethe_half_filling(l=1, Fs=[3.0, 0.5], **opts)
     solve_slater_condon_bethe_half_filling(l=2, Fs=[3.0, 0.5, 0.3], **opts)
-

@@ -161,6 +161,15 @@ namespace triqs_xca::dense {
     return std::vector{sigma_gf};
   }
 
+  triqs::gfs::block_gf<triqs::mesh::dlr_imtime>
+  DenseDiagramEvaluator::compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec) {
+    Backbone backbone(topology, n);
+    for (int f_ix : f_ix_vec) eval_self_energy_fixed_index_pair(G_ppsc[0].data(), backbone, f_ix);
+    auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
+    reset();
+    return std::vector{sigma_gf};
+  }
+
   void DenseDiagramEvaluator::multiply_left_vertex(nda::array_view<dcomplex, 3> T_buf, Backbone &backbone, int v_ix) {
     int o_ix = backbone.get_vertex_orb(v_ix); // orbital index
     int l_ix = backbone.get_pole_ind(backbone.get_vertex_hyb_ind(v_ix));
@@ -260,6 +269,7 @@ namespace triqs_xca::dense {
     // 2. For each kappa, multiply by F_kappa(^dag). Then for each mu, kappa, multiply by Delta_{mu kappa}, and sum over kappa. Finally for each mu,
     // multiply F_mu[^dag] and sum over mu.
     multiply_left_vertex_and_right_zero_vertex(T, backbone, vct0);
+
     // 3. Continue right to left until the final vertex multiplication is complete.
     for (int v = vct0 + 1; v < 2 * m; v++) { // loop from the special vertex to the last vertex
       integrate_left_edge(T, Gt, backbone, v - 1);
@@ -310,6 +320,8 @@ namespace triqs_xca::dense {
     if (backbone.get_fb(0) == 0) diag_order_sign *= -1; // if the first hybridization line is backward, there is an additional sign change
     T *= diag_order_sign * backbone.prefactor_sign;
     Sigma += T;
+
+    backbone.reset_all_inds();
   }
 
   void DenseDiagramEvaluator::multiply_right_vertex(nda::array_view<dcomplex, 3> U_buf, Backbone &backbone, int v_ix) {
