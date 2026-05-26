@@ -660,7 +660,7 @@ class BlockSparseSolver(object):
         n_vec = scatter_array_over_ranks(np.arange(0, n_max, 2, dtype=np.int32))
 
         Sigma = self.get_zero_pseudo_particle_propagator()
-        Sigma = pow(-1, order+1) * self.d.compute_self_energy(G, topology, n_vec)
+        Sigma = pow(-1, order+1) * self.d.compute_self_energy_by_pairs(G, topology, n_vec)
         for bidx, sigma_b in Sigma:
             sigma_b.data[:] = mpi.all_reduce(sigma_b.data)
 
