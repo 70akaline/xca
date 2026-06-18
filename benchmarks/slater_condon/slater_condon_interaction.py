@@ -1,4 +1,6 @@
 
+import os
+
 import numpy as np
 
 from h5 import HDFArchive
@@ -189,12 +191,14 @@ def solve_slater_condon_bethe_half_filling(
 def one_se_iter_slater_condon_bethe_half_filling(
         conserved_operators,
         dense=False,
+        eval_by_pairs=False,
         l=2, # d-orbitals angular momentum quantum number
         Fs=[3.0, 0.5, 0.3], # Slater-Condon interaction parameters for d-orbitals
         beta=1.0,
-        order=1, 
+        order=1,
         eps=1e-3,
         ppsc_tol=1e-2,
+        output_dir=None,
         ):
 
     section_times = {}
@@ -224,6 +228,22 @@ def one_se_iter_slater_condon_bethe_half_filling(
         _prepare_dense_triqs_solver(S, H)
         S.S.fd.copy_aaa_result(poles, weights)
         S.S.fd.hyb_decomposition(poledlrflag=False, eps=0.0)
+        # For order=1 (NCA), fastdiagram's Sigma_Diagram_calc bypasses Delta_F and
+        # uses Deltat directly (set from the exact Delta by _prepare_dense_triqs_solver).
+        # Override Deltat with the pole-fit Delta at the dense DLR nodes so the NCA path
+        # is consistent with the block-sparse path (which always uses the pole-fit Delta).
+        _dlr_it = np.real(np.array(S.S.fd.get_it_actual()))  # in [0,1], all non-negative
+        _r, _n_orb = len(_dlr_it), weights.shape[1]
+        _hyb_polefit = np.zeros((_r, _n_orb, _n_orb), dtype=complex)
+        for _k in range(_r):
+            _t = _dlr_it[_k]  # always >= 0 for get_it_actual()
+            for _p in range(len(poles)):
+                _om = S.beta * poles[_p]
+                # cppdlr kernel: k_it_abs(t, om) for t in [0,1]
+                _ker = (-np.exp(-_t * _om) / (1.0 + np.exp(-_om)) if _om >= 0
+                        else -np.exp((1.0 - _t) * _om) / (1.0 + np.exp(_om)))
+                _hyb_polefit[_k] += _ker * weights[_p]
+        S.S.fd.hyb_init(_hyb_polefit, False)
         section_times['dense_solver_prep'] = perf_counter() - t_section
 
         from triqs_xca.diag import all_connected_pairings
@@ -244,12 +264,14 @@ def one_se_iter_slater_condon_bethe_half_filling(
         S.init_diagram_evaluator()
         section_times['block_sparse_solver_prep'] = perf_counter() - t_section
 
-        # self-energy evaluation by pairs of diagrams
+        # self-energy evaluation, either by pairs of diagrams or one-by-one
         # comm.Barrier()
         t_start = MPI.Wtime()
         t_section = perf_counter()
-        Sigma = S._BlockSparseSolver__eval_pseudo_particle_self_energy_order(S.G, order)
-        # Sigma = S.eval_pseudo_particle_self_energy_order_by_pairs(S.G, order)
+        if eval_by_pairs:
+            Sigma = S.eval_pseudo_particle_self_energy_order_by_pairs(S.G, order)
+        else:
+            Sigma = S._BlockSparseSolver__eval_pseudo_particle_self_energy_order(S.G, order)
         section_times['block_sparse_eval'] = perf_counter() - t_section
         # comm.Barrier()
         t_end = MPI.Wtime()
@@ -262,7 +284,10 @@ def one_se_iter_slater_condon_bethe_half_filling(
     # elapsed = t_end - t_start
 
     if is_root():
-        filename = f"{'dense' if dense else 'bs'}_self_energy_l_{l}_order_{order}_beta_{S.beta}.h5"
+        prefix = 'pairs_bs' if (eval_by_pairs and not dense) else ('dense' if dense else 'bs')
+        filename = f"{prefix}_self_energy_l_{l}_order_{order}_beta_{S.beta}.h5"
+        if output_dir:
+            filename = os.path.join(output_dir, filename)
         output_filenames = [filename]
         # [PROFILING ADDITION] For MPI runs, also write per-rank HDF5 outputs to profile individual processes
         if comm.Get_size() > 1:

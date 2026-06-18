@@ -530,8 +530,8 @@ class BlockSparseSolver(object):
     def __eval_pseudo_particle_self_energy_topology_loop_by_pairs(self, G, topology, verbose=False):
 
         order = len(topology)
-        n_max = self.d.get_num_self_energy_backbones(topology)
-        n_vec = scatter_array_over_ranks(np.arange(0, n_max, 2, dtype=np.int32))
+        pair_indices = np.asarray(self.d.get_self_energy_pair_indices(topology), dtype=np.int32)
+        n_vec = scatter_array_over_ranks(pair_indices)
 
         Sigma = self.get_zero_pseudo_particle_propagator()
         Sigma = pow(-1, order+1) * self.d.compute_self_energy_by_pairs(G, topology, n_vec)
