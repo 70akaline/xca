@@ -34,9 +34,9 @@ def scatter_array_over_ranks(arr):
 
 
 class BlockSparseSolver(object):
-    
-    """ Solver class for triqs_xca using the block sparse algorithm. 
-    
+
+    """ Solver class for triqs_xca using the block sparse algorithm.
+
     Parameters
     ----------
     H_loc : triqs.operators.Operator
@@ -50,13 +50,13 @@ class BlockSparseSolver(object):
     gf_struct : dict
         Triqs style Green's function structure, e.g. ``[('up', 1), ('down', 1)]``, matching the operator content of ``H_loc``.
     conserved_operators : list, optional
-        List of conserved operators (``triqs.operators.Operator`` instances). 
+        List of conserved operators (``triqs.operators.Operator`` instances).
         Default is ``'automatic'`` using the autopartition algorithm of ``triqs.atom_diag``.
         To disable symmetries and use the dense diagram evaluator (``DenseDiagramEvaluator``), pass an empty list ``[]``.
     timer : Timer, optional
         Timer for performance measurements. Default: ``None`` (will be setup automatically).
     atom_diag : AtomDiag, optional
-        Triqs AtomDiag object ``triqs.atom_diag.AtomDiag``. Default: ``None``. 
+        Triqs AtomDiag object ``triqs.atom_diag.AtomDiag``. Default: ``None``.
         If not provided, it will be initialized automatically using the provided local Hamiltonian and conserved operators.
     verbose : bool/int, optional
         Verbosity flag controlling level of printouts. Default: ``True``.
@@ -64,17 +64,17 @@ class BlockSparseSolver(object):
     Notes
     -----
 
-    The hybridization function is available as the ``Delta_tau`` attribute, which is a block Green's function in imaginary time. 
+    The hybridization function is available as the ``Delta_tau`` attribute, which is a block Green's function in imaginary time.
     It has to be set by the user before calling ``solve()``. If not set by the user, it will be initialized to zero.
 
     The main method of the class is ``solve()``, which runs the pseudo particle self-consistent perturbation theory until convergence.
 
-    The single particle Green's function is available as the ``G_tau`` attribute after calling ``solve()``. 
+    The single particle Green's function is available as the ``G_tau`` attribute after calling ``solve()``.
     It is a block Green's function in imaginary time.
 
     """
 
-    def __init__(self, H_loc, beta, w_max, eps, gf_struct, 
+    def __init__(self, H_loc, beta, w_max, eps, gf_struct,
                  conserved_operators='automatic', dlr_symmetrize=False,
                  timer=None, atom_diag=None, verbose=True):
 
@@ -95,11 +95,11 @@ class BlockSparseSolver(object):
         if verbose and is_root():
             print(logo())
             print()
-            if self.use_dense_solver: 
+            if self.use_dense_solver:
                 print(f'use_dense_solver = {self.use_dense_solver}')
-            if self.conserved_operators != 'automatic': 
+            if self.conserved_operators != 'automatic':
                 print(f'conserved_operators = {self.conserved_operators}')
-        
+
         self.eta = 0. # Pseudo particle chemical potential (shift of the pseudo particle energies).
 
         self.mesh_tau = MeshDLRImTime(beta=self.beta, statistic='Fermion', w_max=self.w_max, eps=self.eps, symmetrize=self.dlr_symmetrize)
@@ -110,14 +110,14 @@ class BlockSparseSolver(object):
         if atom_diag is not None:
             self.atom_diag = atom_diag
         elif self.conserved_operators == 'automatic':
-            # Uses autopartition algorithm for symmetry discovery, when no conserved operators are provided. 
+            # Uses autopartition algorithm for symmetry discovery, when no conserved operators are provided.
             # This is the default, and recommended, usage.
-            self.atom_diag = AtomDiag(self.H_loc, self.fundamental_operators) 
+            self.atom_diag = AtomDiag(self.H_loc, self.fundamental_operators)
         else:
             self.atom_diag = AtomDiag(self.H_loc, self.fundamental_operators, self.conserved_operators)
         self.timer.stop()
 
-        if verbose and is_root(): 
+        if verbose and is_root():
             #print(f'mesh: {self.mesh_tau}')
             print(f'beta = {beta}, w_max = {w_max}, eps = {eps}, N_DLR = {len(self.mesh_tau)}')
             print_atom_diag_info(self.atom_diag)
@@ -138,7 +138,7 @@ class BlockSparseSolver(object):
         np.testing.assert_array_almost_equal(self.mesh_tau.dlr_freq, ito.get_rfnodes())
 
         self.dysons = [DysonItPPSC(self.beta, ito, G0_block.data) for _, G0_block in self.G0]
-    
+
         self.timer.stop()
         self.timer.stop()
 
@@ -153,7 +153,7 @@ class BlockSparseSolver(object):
             assert( tol is not None and tol > 0 ), 'Error: tol must be provided and positive when compression is enabled.'
 
             from adapol.triqs import TriqsDLRCompression
-        
+
             try:
                 tdc = TriqsDLRCompression(Delta_tau_dense, tol=tol, verbose=verbose and is_root())
                 poles, pole_weights, fit_error = tdc.poles, tdc.residues, tdc.error
@@ -192,9 +192,9 @@ class BlockSparseSolver(object):
             assert( g.target_shape[0] == g.target_shape[1] )
 
         norb = sum([ g.target_shape[0] for b, g in G ])
-        
+
         G_dense = Gf(mesh=G.mesh, target_shape=[norb]*2)
-        
+
         sidx = 0
         for b, g in G:
             size = g.target_shape[0]
@@ -239,7 +239,7 @@ class BlockSparseSolver(object):
 
     def solve(self, max_order, tol=1e-4, maxiter=10, mix=1., hyb_tol=None, hyb_comp=True, normalization='classic', spgf_max_order=None, verbose=True):
         """ Solve the impurity problem using pseudo particle self-consistent perturbation theory.
-        
+
         Parameters
         ----------
         max_order : int
@@ -285,7 +285,7 @@ class BlockSparseSolver(object):
         self.hyb_tol = hyb_tol if hyb_tol is not None else 0.1 * tol
 
         self.hyb_comp = hyb_comp if max_order > 1 else False # Skip hybridization compression for max_order = 1 (NCA) since the pole representation is not used.
-        
+
         #if verbose and is_root(): print(f'hyb_tol = {self.hyb_tol:2.2E}')
 
         self.fit_hybridization(tol=self.hyb_tol, compression=self.hyb_comp, verbose=verbose)
@@ -309,22 +309,22 @@ class BlockSparseSolver(object):
                 G_new = self.solve_dyson(self.Sigma, self.eta)
 
             elif normalization == 'ode+root':
-                self.solve_ppsc_chempot_adiabatic_ode(tol=100*self.eps)               
+                self.solve_ppsc_chempot_adiabatic_ode(tol=100*self.eps)
                 self.solve_ppsc_chempot_newton(xtol=10*self.eps)
                 G_new = self.solve_dyson(self.Sigma, self.eta)
 
             elif normalization == 'ode+classic':
-                self.solve_ppsc_chempot_adiabatic_ode(tol=100*self.eps)                                
+                self.solve_ppsc_chempot_adiabatic_ode(tol=100*self.eps)
                 G_new = self.solve_dyson(self.Sigma, self.eta)
                 G_new = self.normalize_pseudo_particle_gf(G_new)
 
             elif normalization == 'odeG+root':
-                self.solve_ppsc_chempot_adiabatic_ode_G(tol=100*self.eps)               
+                self.solve_ppsc_chempot_adiabatic_ode_G(tol=100*self.eps)
                 self.solve_ppsc_chempot_newton(xtol=10*self.eps)
                 G_new = self.solve_dyson(self.Sigma, self.eta)
 
             elif normalization == 'odeG+classic':
-                self.solve_ppsc_chempot_adiabatic_ode_G(tol=100*self.eps)                                
+                self.solve_ppsc_chempot_adiabatic_ode_G(tol=100*self.eps)
                 G_new = self.solve_dyson(self.Sigma, self.eta)
                 G_new = self.normalize_pseudo_particle_gf(G_new)
 
@@ -355,9 +355,9 @@ class BlockSparseSolver(object):
 
 
     def solve_bare(self, max_order, hyb_tol=None, hyb_comp=True, use_dyson=False, spgf_max_order=None, verbose=True):
-        """ Solve the impurity problem using the bare pseudo particle self-consistent perturbation theory, 
+        """ Solve the impurity problem using the bare pseudo particle self-consistent perturbation theory,
         i.e. with the pseudo particle self-energy evaluated using the atomic pseudo particle Green's function.
-         
+
         .. math::
             \\Sigma = \\Sigma[G_0]
 
@@ -369,10 +369,10 @@ class BlockSparseSolver(object):
         or when ``use_dyson=True`` by solving the Dyson equation
 
         .. math::
-            (1 - G_0 \\ast \\Sigma \\ast \\, ) G = G_0 
-             
+            (1 - G_0 \\ast \\Sigma \\ast \\, ) G = G_0
+
         This is useful for benchmarking and testing purposes.
-        
+
         Parameters
         ----------
         max_order : int
@@ -395,13 +395,13 @@ class BlockSparseSolver(object):
 
         self.hyb_tol = hyb_tol if hyb_tol is not None else 10 * self.eps
         self.hyb_comp = hyb_comp if max_order > 1 else False # Skip hybridization compression for max_order = 1 (NCA) since the pole representation is not used.
-        
+
         self.fit_hybridization(tol=self.hyb_tol, compression=self.hyb_comp, verbose=verbose)
         self.init_diagram_evaluator() # FIXME! Evaluator takes hyb poles and coeffs in constructor
 
         self.Sigma = self.eval_pseudo_particle_self_energy(self.G0, self.max_order, verbose=verbose > 1)
 
-        if use_dyson:   
+        if use_dyson:
             self.timer.start('Dyson')
             G = self.solve_dyson(self.Sigma, self.eta)
         else:
@@ -422,7 +422,7 @@ class BlockSparseSolver(object):
 
         if verbose and is_root():
             print(); self.timer.write()
-        
+
 
     def normalize_pseudo_particle_gf(self, G):
         """ Normalize the pseudo particle Green's function by updating the pseudo particle chemical potential eta, such that the partition function Z is equal to 1. """
@@ -447,7 +447,7 @@ class BlockSparseSolver(object):
         self.eta += deta
 
         return G_new
-    
+
 
     def normalize_pseudo_particle_gf_and_sigma(self, G, Sigma):
         """ Normalize the pseudo particle Green's function by updating the pseudo particle chemical potential eta, such that the partition function Z is equal to 1. """
@@ -489,10 +489,10 @@ class BlockSparseSolver(object):
 
     def partition_function(self):
         """ Partition function :math:`Z` of the impurity model, computed from the pseudo particle Green's function as
-        
+
         .. math::
             Z = -\\mathrm{Tr}[ G(\\beta) ] \\cdot e^{-\\beta \\eta}
-          
+
         Returns
         -------
         float
@@ -517,14 +517,14 @@ class BlockSparseSolver(object):
 
     def expectation_value(self, operator):
         """ Expectation value :math:`\\langle \\hat{O} \\rangle` of an operator :math:`\\hat{O}`, computed from the pseudo particle Green's function as
-        
+
         .. math::
             \\langle \\hat{O} \\rangle = -\\mathrm{Tr}[ \\hat{O} G(\\beta) ]
-          
+
         Parameters
         ----------
         operator : triqs.operators.Operator
-            Operator :math:`\\hat{O}` for which the expectation value is computed. 
+            Operator :math:`\\hat{O}` for which the expectation value is computed.
             It has to be compatible with the operator content of the local Hamiltonian and the Green's function structure.
 
         Returns
@@ -533,16 +533,16 @@ class BlockSparseSolver(object):
             Expectation value :math:`\\langle \\hat{O} \\rangle` of the operator :math:`\\hat{O}`.
         """
         return expectation_value(operator, self.atom_diag, self.G)
-    
+
 
     def many_body_density_matrix(self, G):
         """ Get the block sparse many body density matrix :math:`\\rho` from the pseudo particle Green's function :math:`G`.
-        
+
         Returns
         -------
-        
+
         rho : list of tuples(str, np.ndarray)
-            List of tuples ``(bidx, rho_b)``, where ``bidx`` is the block index 
+            List of tuples ``(bidx, rho_b)``, where ``bidx`` is the block index
             and ``rho_b`` is the many body density matrix for block ``bidx``
         """
         rho = []
@@ -551,7 +551,7 @@ class BlockSparseSolver(object):
             rho_b = -g_b_dlr(g_b.mesh.beta)
             rho.append((bidx, rho_b))
         return rho
-    
+
 
     def herm_err(self, G):
         """ Compute maximum hermiticity error of a block Green's function :math:`G` """
@@ -609,7 +609,7 @@ class BlockSparseSolver(object):
     def __eval_pseudo_particle_self_energy_order(self, G, order, connected, verbose=False):
 
         Sigma = self.get_zero_pseudo_particle_propagator()
-        
+
         pairings = all_connected_pairings if connected else all_pairings
 
         for sign, topology in pairings(order):
@@ -617,9 +617,9 @@ class BlockSparseSolver(object):
             topology = np.array(topology, dtype=np.int32)
             Sigma +=  pow(-1, order) * sign * \
                 self.__eval_pseudo_particle_self_energy_topology_loop(G, topology, verbose=verbose) # FIXME! Signs
-            
+
         return Sigma
-    
+
 
     def eval_pseudo_particle_self_energy_order_by_pairs(self, G, order, verbose=False):
 
@@ -630,10 +630,10 @@ class BlockSparseSolver(object):
             topology = np.array(topology, dtype=np.int32)
             Sigma +=  pow(-1, order) * sign * \
                 self.__eval_pseudo_particle_self_energy_topology_loop_by_pairs(G, topology, verbose=verbose) # FIXME! Signs
-            
+
         return Sigma
-    
-    
+
+
     def eval_pseudo_particle_self_energy_topology(self, G, topology):
         order = len(topology)
         return pow(-1, order+1) * self.d.compute_self_energy(G, topology) # FIXME! Sign convention.
@@ -656,8 +656,8 @@ class BlockSparseSolver(object):
     def __eval_pseudo_particle_self_energy_topology_loop_by_pairs(self, G, topology, verbose=False):
 
         order = len(topology)
-        n_max = self.d.get_num_self_energy_backbones(topology)
-        n_vec = scatter_array_over_ranks(np.arange(0, n_max, 2, dtype=np.int32))
+        pair_indices = np.asarray(self.d.get_self_energy_pair_indices(topology), dtype=np.int32)
+        n_vec = scatter_array_over_ranks(pair_indices)
 
         Sigma = self.get_zero_pseudo_particle_propagator()
         Sigma = pow(-1, order+1) * self.d.compute_self_energy_by_pairs(G, topology, n_vec)
@@ -665,7 +665,7 @@ class BlockSparseSolver(object):
             sigma_b.data[:] = mpi.all_reduce(sigma_b.data)
 
         return Sigma
-    
+
 
     def get_zero_pseudo_particle_propagator(self):
         return zero_pseudo_particle_propagator(self.atom_diag, self.mesh_tau)
@@ -688,7 +688,7 @@ class BlockSparseSolver(object):
         for order in range(1, max_order+1):
             with self.timer(f'Order {order}'):
                 self.spgf += self.__eval_single_particle_greens_function_order(G, order)
-        
+
         return self.spgf
 
 
@@ -731,12 +731,12 @@ class BlockSparseSolver(object):
 
         .. math::
             C(\\tau) = \\langle T_\\tau O(\\tau) O(0) \\rangle
-        
-        where :math:`O(\\tau)` and :math:`O(0)` are operators in imaginary time, 
-        and :math:`T_\\tau` is the imaginary time ordering operator. 
-        
-        The operators are specified by the lists of fundamental operators 
-        ``ops_tau`` and ``ops_0``, which contain the operators at imaginary time 
+
+        where :math:`O(\\tau)` and :math:`O(0)` are operators in imaginary time,
+        and :math:`T_\\tau` is the imaginary time ordering operator.
+
+        The operators are specified by the lists of fundamental operators
+        ``ops_tau`` and ``ops_0``, which contain the operators at imaginary time
         :math:`\\tau` and :math:`0`, respectively.
         """
         corr = Gf(mesh=self.mesh_tau, target_shape=[len(ops_tau), len(ops_0)])
@@ -756,7 +756,7 @@ class BlockSparseSolver(object):
             prefactor = pow(-1, order) * sign
             self.__inplace_eval_one_time_correlator_topology_loop(
                 corr, G, topology, ops_tau, ops_0, prefactor)
-    
+
 
     def __inplace_eval_one_time_correlator_topology_loop(self, corr, G, topology, ops_tau, ops_0, prefactor):
 
@@ -769,32 +769,32 @@ class BlockSparseSolver(object):
 
 
     def Z_alpha(self, alpha, eta):
-        r""" Partition function with Sigma scaled by alpha 
+        r""" Partition function with Sigma scaled by alpha
         Solving
-        
+
         .. math::
             (1 - G_0\ast*(\alpha \cdot \Sigma - \eta)\ast*)G = G_0
 
             Z_\alpha = - \textrm{Tr} \left[ G_\alpha (\beta) \right]
-        
+
         """
 
         #if is_root(): print(f'Z_alpha: alpha = {alpha}, eta = {eta}')
 
         if type(eta) == np.ndarray: eta = eta.item()
-        
+
         Sigma = self.pseudo_particle_self_energy()
         #Ga = self.solve_dyson(alpha**2 * Sigma, eta)
         Ga = self.solve_dyson(alpha * Sigma, eta)
         Za = -trace(Ga)
         #Za = self.partition_function_from_ppgf(Ga).real
-        return Za    
+        return Za
 
 
     def dZ_alpha_deta(self, alpha, eta):
         r""" Derivative of partition function Z_\alpha with respect to
-        the pseudo-particle chemical potential eta. 
-        
+        the pseudo-particle chemical potential eta.
+
         .. math::
             \frac{d Z_\alpha}{d \eta} = - \textr{Tr} \left[G_\alpha G_\alpha \right]
         """
@@ -823,7 +823,7 @@ class BlockSparseSolver(object):
         Za = self.partition_function_from_ppgf(G).real
         dZ_deta = -trace(conv(G, G)).real
         return Za - 1, dZ_deta
-    
+
 
     def Z_alpha_minus_one_and_derivative_and_2nd_derivative(self, alpha, eta):
         r""" Compute Z_alpha - 1 and its derivatives with respect to eta, for root finding in the Newton solver. """
@@ -849,7 +849,7 @@ class BlockSparseSolver(object):
         r""" Analytic derivative of :math:`\eta(\alpha)`
 
         .. math::
-            \frac{d \eta}{d \alpha} = 
+            \frac{d \eta}{d \alpha} =
                 - \textr{Tr} \left[ G_\alpha \ast \Sigma \ast G_\alpha \right]
                 / \textrm{Tr} \left[ G_\alpha \ast G_\alpha \right]
 
@@ -878,8 +878,8 @@ class BlockSparseSolver(object):
 
     def d2eta_dalpha_deta(self, alpha, eta):
         r""" Higher order derivative (used for stiff ODE solver)
-        
-        .. math:: 
+
+        .. math::
             \frac{d}{d\eta} \left (\frac{d \eta}{d \alpha})
             =
             - \textr{Tr} \left[ G^2_\alpha \ast \Sigma \ast G_\alpha \right]
@@ -887,24 +887,24 @@ class BlockSparseSolver(object):
             +
             \textr{Tr} \left[ G_\alpha \ast \Sigma \ast G^2_\alpha \right]
             / \textrm{Tr} \left[ G_\alpha \ast G_\alpha \right]
-            - 
+            -
             2 \textrm{Tr} \left[ G_\alpha \ast G_\alpha \ast G_\alpha \right]
             / \textrm{Tr} \left[ G_\alpha \ast G_\alpha \right]^2
 
         """
-    
+
         #raise NotImplementedError('d2eta_dalpha_deta is not implemented yet, and may contain errors in the formula.')
-    
+
         print('--> d2eta_dalpha_deta')
 
         Sigma = self.pseudo_particle_self_energy()
 
         #Ga = self.solve_dyson(alpha**2 * Sigma, eta) # fix to alpha * Sigma
         Ga = self.solve_dyson(alpha * Sigma, eta)
-        
+
         Ga2 = conv(Ga, Ga)
         Ga3 = conv(Ga, Ga2)
-        
+
         TrGa2 = -trace(Ga2)
         TrGa3 = -trace(Ga3)
 
@@ -915,13 +915,13 @@ class BlockSparseSolver(object):
         # Fix for alpha * Sigma
         #d2eta_dalpha_deta = -2*alpha * ((TrGa2SigmaGa + TrGaSigmaGa2)/TrGa2 - 2*TrGaSigmaGa*TrGa3/TrGa2**2)
         d2eta_dalpha_deta = -(TrGa2SigmaGa + TrGaSigmaGa2)/TrGa2 + 2*TrGaSigmaGa*TrGa3/TrGa2**2
-        
+
         return d2eta_dalpha_deta.real
-    
-    
+
+
     @timer('ODE normalization')
     def solve_ppsc_chempot_adiabatic_ode(
-        self, tol=1e-9, 
+        self, tol=1e-9,
         method='RK23',
         #method='DOP853',
         #method='RK45',
@@ -934,25 +934,25 @@ class BlockSparseSolver(object):
         from scipy.integrate import solve_ivp
 
         sol = solve_ivp(
-            func, (0., 1.), 
-            np.array([0.]), 
+            func, (0., 1.),
+            np.array([0.]),
             #jac=jac,
-            atol=tol, 
+            atol=tol,
             method=method,
             dense_output=True,
             )
-        
+
         self.eta = sol.y[0, -1]
         G = self.solve_dyson(self.Sigma, self.eta)
         Z = self.partition_function_from_ppgf(G)
-        
+
         if is_root(): print(f'PPSC: Chempot eta from adiabatic ODE: Z-1={Z-1:+2.2E}')
         return sol
 
 
     @timer('ODE normalization G')
     def solve_ppsc_chempot_adiabatic_ode_G(
-        self, tol=1e-9, 
+        self, tol=1e-9,
         method='RK23',
         ):
 
@@ -964,15 +964,15 @@ class BlockSparseSolver(object):
                 g.data[:] = y[idx:idx+size].reshape(g.data.shape)
                 idx += size
             return G
-        
+
         def to_array(G):
             arr = []
             for bidx, g in G:
                 arr.append(g.data.flatten())
             return np.concatenate(arr)
-        
+
         def get_eta(G0, G, S):
-            
+
             TrG0G = trace(conv(G0, G))
             TrG0SG  = trace(G - G0 - conv(G0, conv(S, G)))
 
@@ -984,17 +984,17 @@ class BlockSparseSolver(object):
             G = from_array(y)
 
             S = self.pseudo_particle_self_energy()
-        
+
             GG = conv(G, G)
             GSG = conv(G, conv(S, G))
-            
+
             TrGG = trace(GG)
             TrGSG  = trace(GSG)
 
             dG = GSG - GG * TrGSG / TrGG
 
             dy = to_array(dG)
-            
+
             print(f'func: t = {t}, trace(G) = {trace(G)}, max(abs(dG)) = {np.max(np.abs(dy))}')
 
             return dy
@@ -1005,11 +1005,11 @@ class BlockSparseSolver(object):
 
         sol = solve_ivp(
             func, (0., 1.), y0,
-            atol=tol, 
+            atol=tol,
             method=method,
             dense_output=False,
             )
-        
+
 
         G = from_array(sol.y[:, -1])
         self.eta = get_eta(self.G0, G, self.Sigma).real
@@ -1027,16 +1027,16 @@ class BlockSparseSolver(object):
     def solve_ppsc_chempot_newton(self, **kwargs):
 
         if is_root(): print(f'PPSC: Starting root solver for eta with kwargs = {kwargs}')
-        
+
         #f = lambda eta : self.Z_alpha(1., eta) - 1
         #fprime = lambda eta : self.dZ_alpha_deta(1., eta)
         #f = lambda eta : self.Z_alpha_minus_one_and_derivative(1., eta)
         f = lambda eta : self.Z_alpha_minus_one_and_derivative_and_2nd_derivative(1., eta)
-        
+
         from scipy.optimize import root_scalar
 
         sol = root_scalar(
-            f, x0=self.eta, 
+            f, x0=self.eta,
             #fprime=fprime,
             fprime=True,
             fprime2=True,
@@ -1045,7 +1045,7 @@ class BlockSparseSolver(object):
             #xtol=tol,
             **kwargs,
             )
-        
+
         self.eta = sol.root
 
         G = self.solve_dyson(self.Sigma, self.eta)
@@ -1054,13 +1054,13 @@ class BlockSparseSolver(object):
         if is_root(): print(f'PPSC: Root solver done, eta = {self.eta:+2.2E} Z-1 = {Z-1:+2.2E}')
 
         return sol
-    
+
 
     @timer('Bisection normalization')
     def solve_ppsc_chempot_bisection(self, **kwargs):
 
         if is_root(): print(f'PPSC: Starting bisection solver for eta with kwargs = {kwargs}')
-        
+
         def func(eta):
             Sigma = self.pseudo_particle_self_energy()
             G = self.solve_dyson(Sigma, eta)
@@ -1111,13 +1111,13 @@ class BlockSparseSolver(object):
 
                 #if max_tau0_blockgf(G) > -1. and min_tau0_blockgf(G) > -1.:
                 #    val = +1.
-                
+
                 #if max_tau0_blockgf(G) < -1. and min_tau0_blockgf(G) < -1.:
                 #    val = -1.
 
                 if max_blockgf(G) > 1.:
                     val = -1.
-                
+
                 if max_blockgf(G) < 1.:
                     val = +1.
 
@@ -1129,7 +1129,7 @@ class BlockSparseSolver(object):
 
 
             return val
-        
+
         print(f'Pole energies = {np.max(np.abs(self.hyb.poles))}, max AD energy = {np.max(np.abs(self.atom_diag.energies))}')
 
         #E_max = 0.5 * np.max([np.max(self.hyb.poles), np.max(self.atom_diag.energies)])
@@ -1146,7 +1146,7 @@ class BlockSparseSolver(object):
             method='bisect',
             **kwargs,
             )
-        
+
         self.eta = sol.root
 
         G = self.solve_dyson(self.Sigma, self.eta)
@@ -1154,7 +1154,7 @@ class BlockSparseSolver(object):
 
         if is_root(): print(f'PPSC: Bisection solver done, eta = {self.eta:+2.2E} Z-1 = {Z-1:+2.2E}')
 
-        return sol    
+        return sol
 
 
     def __eq__(self, obj):
@@ -1163,11 +1163,11 @@ class BlockSparseSolver(object):
             if key not in obj.__dict__.keys():
                 if key != 'd': # -- Skip the diagram evaluator
                     return False
-        
+
         for key in self.__dict__.keys():
             if key not in self.__skip_keys():
                 a = getattr(self, key)
-                b = getattr(obj, key)                
+                b = getattr(obj, key)
                 if type(a) == np.ndarray:
                     if not np.array_equal(a, b):
                         print(f'BlockSparseSolver: __eq__: attribute {key} differ')
@@ -1197,7 +1197,7 @@ class BlockSparseSolver(object):
 
         return True
 
-    
+
     def __skip_keys(self):
         return ['d', 'dysons', 'timer']
 
@@ -1212,7 +1212,7 @@ class BlockSparseSolver(object):
     def __copy__(self):
         return self.__factory_from_dict__(self.__class__.__name__, self.__reduce_to_dict__())
 
-    
+
     def __deepcopy__(self, memo):
         d = copy.deepcopy(self.__reduce_to_dict__())
         return self.__factory_from_dict__(self.__class__.__name__, d)
@@ -1281,7 +1281,7 @@ def hamiltonian_matrix(ad):
 
 
 def hamiltonian_matrix_blocks(ad):
-  
+
     H_blocks = []
 
     for sidx in range(ad.n_subspaces):
@@ -1305,23 +1305,23 @@ def zero_pseudo_particle_propagator_dense(ad, mesh_tau):
 
     G_tau = Gf(mesh=mesh_tau, target_shape=[ad.full_hilbert_space_dim]*2)
     G_tau.data[:] = 0.
-    
+
     return G_tau
 
 
 def zero_pseudo_particle_propagator(ad, mesh_tau):
 
     G_tau_blocks = []
-    
+
     for sidx in range(ad.n_subspaces):
         G_tau = Gf(mesh=mesh_tau, target_shape=[ad.get_subspace_dims()[sidx]]*2)
         G_tau.data[:] = 0.
         G_tau_blocks.append(G_tau)
-        
+
     G_tau = BlockGf(block_list=G_tau_blocks)
 
     return G_tau
-        
+
 
 def atomic_pseudo_particle_greens_function_dense(ad, beta, mesh_tau):
     G_b_tau = atomic_pseudo_particle_greens_function(ad, beta, mesh_tau)
@@ -1337,11 +1337,11 @@ def atomic_pseudo_particle_greens_function(ad, beta, mesh_tau):
     eta0 = -np.log(Z0) / beta
 
     tau = np.array([ float(t) for t in mesh_tau ])
-    
+
     for sidx in range(ad.n_subspaces):
 
         G_tau = Gf(mesh=mesh_tau, target_shape=[ad.get_subspace_dims()[sidx]]*2)
-        
+
         U = ad.unitary_matrices[sidx]
         E = ad.energies[sidx]
 
@@ -1349,7 +1349,7 @@ def atomic_pseudo_particle_greens_function(ad, beta, mesh_tau):
         G_tau.data[:] = np.matmul(U, G_diag_tau[:, :, None] * U.T.conj()[None, :, :])
 
         G_tau_blocks.append(G_tau)
-        
+
     G_tau = BlockGf(block_list=G_tau_blocks)
 
     return G_tau, eta0
@@ -1382,7 +1382,7 @@ def print_atom_diag_info(ad, verbose=False):
     print(f'{type(ad).__name__}: dim {ad.full_hilbert_space_dim} with ' + \
         f'{ad.n_subspaces} subspaces dims {subspace_dims} freq {num_subspaces_per_dim} ' + \
         f'E min/max {emin:+2.2E}/{emax:+2.2E}')
-    
+
     if verbose:
         print(f'full_hilbert_space_dim = {ad.full_hilbert_space_dim}')
         print(f'n_subspaces = {ad.n_subspaces}')
@@ -1417,7 +1417,7 @@ def pseudo_particle_block_gf_to_dense(block_gf, ad):
         bidx = np.ix_(range(len(mesh)), fidx, fidx)
         dense_gf.data[bidx] = block_gf[sidx].data
 
-    return dense_gf    
+    return dense_gf
 
 
 def get_max_abs_trapz_block_gf(G):
@@ -1450,7 +1450,7 @@ def trace_dlr_imtime_BlockGf(G_dlr_imtime_BlockGf):
 
     G_dlr_coeff_BlockGf = make_gf_dlr(G_dlr_imtime_BlockGf)
 
-    def block_trace(g_dlr_coeff): 
+    def block_trace(g_dlr_coeff):
         return np.trace(g_dlr_coeff(g_dlr_coeff.mesh.beta))
 
     return np.sum([block_trace(g) for _, g in G_dlr_coeff_BlockGf])
