@@ -1,4 +1,6 @@
 
+import os
+
 import numpy as np
 
 from h5 import HDFArchive
@@ -88,7 +90,7 @@ def solve_slater_condon_bethe_half_filling(
 
     return S
 
-if __name__ == '__main__':
+ if __name__ == '__main__':
 
     opts = dict(
         beta=1.0,

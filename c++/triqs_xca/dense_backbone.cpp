@@ -1,3 +1,5 @@
+#include <vector>
+
 #include <cppdlr/utils.hpp>
 #include <nda/nda.hpp>
 
@@ -229,10 +231,32 @@ namespace triqs_xca::dense {
     return get_num_self_energy_backbones(backbone);
   }
 
+  nda::array<int, 1> DenseDiagramEvaluator::get_self_energy_pair_indices(nda::array_const_view<int, 2> topology) {
+    Backbone backbone(topology, n);
+    int f_ix_max = get_num_self_energy_backbones(backbone);
+    int p_ix_max = static_cast<int>(pow(hyb.poles.size(), backbone.m - 1));
+    int n_p      = backbone.o_ix_max * p_ix_max;
+
+    std::vector<int> inds;
+    for (int f_ix = 0; f_ix < f_ix_max; f_ix++) {
+      if ((f_ix / n_p) % 2 == 0) inds.push_back(f_ix);
+    }
+
+    nda::array<int, 1> result(inds.size());
+    for (size_t i = 0; i < inds.size(); i++) result(i) = inds[i];
+    return result;
+  }
+
   int DenseDiagramEvaluator::get_num_self_energy_backbones(Backbone &backbone) {
     int f_ix_max = static_cast<int>(backbone.fb_ix_max * backbone.o_ix_max * pow(hyb.poles.size(), backbone.m - 1));
     return f_ix_max;
   }
+
+  // temporary debugging getters: expose the hybridization function values at the
+  // DLR imaginary time nodes, as reconstructed from (poles, coeffs)
+  nda::array<dcomplex, 3> DenseDiagramEvaluator::get_hyb_values() { return hyb.values; }
+  nda::array<dcomplex, 3> DenseDiagramEvaluator::get_hyb_values_reflect() { return hyb.values_reflect; }
+  nda::vector<double> DenseDiagramEvaluator::get_hyb_poles() { return hyb.poles; }
 
   void DenseDiagramEvaluator::eval_self_energy(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone) {
     // loop over all flat indices
@@ -243,11 +267,15 @@ namespace triqs_xca::dense {
   }
 
   void DenseDiagramEvaluator::eval_self_energy_by_pairs(nda::array_const_view<dcomplex, 3> Gt, Backbone &backbone) {
-    // loop over flat indices in pairs that differ only in the direction of the hybridization line connected to the zero vertex
+    // eval_self_energy_fixed_index_pair(f_ix) evaluates both values of fb(0) (the direction of the
+    // hybridization line connected to vertex 0) for the (orbital, pole, fb(1), ...) combination
+    // encoded by f_ix. To cover every diagram exactly once, only call it for f_ix whose own
+    // fb(0) == 0, i.e. fb_ix = f_ix / (o_ix_max * p_ix_max) is even.
     int f_ix_max = get_num_self_energy_backbones(backbone);
-    for (int f_ix = 0; f_ix < f_ix_max; f_ix += 2) { // TODO check that these are the correct indices
-      // evaluate one diagram together with the diagram with opposite direction on the line connected to zero
-      eval_self_energy_fixed_index_pair(Gt, backbone, f_ix);
+    int p_ix_max = static_cast<int>(pow(hyb.poles.size(), backbone.m - 1));
+    int n_p      = backbone.o_ix_max * p_ix_max;
+    for (int f_ix = 0; f_ix < f_ix_max; f_ix += 1) {
+      if ((f_ix / n_p) % 2 == 0) { eval_self_energy_fixed_index_pair(Gt, backbone, f_ix); }
     }
   }
 

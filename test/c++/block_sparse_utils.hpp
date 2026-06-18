@@ -60,6 +60,18 @@ FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps
 DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda, double eps, double hyb_pole = 0.0);
 
 /**
+ * @brief Helper function for setting up a two-fermion model with interaction U * n0 * n1 and one-pole hybridization, using dense operator storage
+ * @param[in] beta Inverse temperature
+ * @param[in] Lambda DLR cutoff parameter
+ * @param[in] eps DLR epsilon parameter
+ * @param[in] U Interaction strength
+ * @param[in] mu Chemical potential
+ * @param[in] hyb_pole Pole value for the single-pole hybridization decomposition
+ * @return DenseFermionModelData containing hybridization coefficients/poles, atom_diag object
+ */
+DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda, double eps, double U = 3.0, double mu = 0.0, double hyb_pole = -1.5);
+
+/**
  * @brief Convert a Hamiltonian matrix to a non-interacting Green's function matrix in dense storage
  * @param[in] Hmat Hamiltonian matrix
  * @param[in] beta Inverse temperature

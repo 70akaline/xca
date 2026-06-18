@@ -116,6 +116,50 @@ DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda,
   return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc_dense = G_ppsc_dense, .Fset_dense = Fset_dense};
 }
 
+DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda, double eps, double U, double mu, double hyb_pole) {
+  // Helper function for setting up two-fermion tests with H = -mu * (n0 + n1) + U * n0 * n1 and one-pole hybridization, with dense storage for the non-interacting propagators.
+
+  using triqs::operators::many_body_operator_complex;
+  using triqs::operators::n;
+
+  many_body_operator_complex H;
+  auto N0  = n("0", 0);
+  auto N1  = n("1", 0);
+  auto Nop = N0 + N1;
+  H        = -mu * Nop + U * N0 * N1;
+
+  triqs::atom_diag::fundamental_operator_set fop_set;
+  fop_set.insert("0", 0);
+  fop_set.insert("1", 0);
+
+  std::vector<many_body_operator_complex> sym_ops = {Nop};
+  auto ad                                         = triqs::atom_diag::atom_diag<true>(H, fop_set, sym_ops);
+
+  int p    = 1;
+  int norb = 2;
+  nda::array<dcomplex, 3> hyb_coeffs(p, norb, norb);
+  hyb_coeffs(0, _, _) = nda::eye(norb);
+
+  nda::vector<double> hyb_poles(p);
+  hyb_poles = hyb_pole;
+
+  auto H_dense                  = triqs_xca::atom_diag::get_full_h_atomic(ad);
+  auto dlr_rf                   = build_dlr_rf(Lambda, eps);
+  auto itops                    = imtime_ops(Lambda, dlr_rf);
+  auto const &dlr_it            = itops.get_itnodes();
+  auto dlr_it_abs               = rel2abs(dlr_it);
+  auto Gt_dense                 = Hmat_to_Gtmat(H_dense, beta, dlr_it_abs);
+  auto [Fs_dense, F_dags_dense] = triqs_xca::atom_diag::get_operators_dense(ad);
+  auto Fset_dense               = triqs_xca::atom_diag::DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
+
+  std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_block(1);
+  triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps);
+  gf_block[0] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, Gt_dense);
+  auto G_ppsc_dense = triqs::gfs::block_gf<triqs::mesh::dlr_imtime>(gf_block);
+
+  return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc_dense = G_ppsc_dense, .Fset_dense = Fset_dense};
+}
+
 nda::array<dcomplex, 3> Hmat_to_Gtmat(nda::array<dcomplex, 2> Hmat, double beta, nda::array<double, 1> dlr_it_abs) {
   // Helper function for computing the non-interacting Green's function from the Hamiltonian, both in dense storage
 

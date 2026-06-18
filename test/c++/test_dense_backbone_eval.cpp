@@ -135,7 +135,7 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   // DLR parameters
   double beta   = 8.0;
   double Lambda = 10.0 * beta;
-  double eps    = 1.0e-6;
+  double eps    = 1.0e-10;
 
   // DLR generation
   auto dlr_rf = build_dlr_rf(Lambda, eps);
@@ -159,22 +159,41 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
     hyb_coeffs(l, 2, 3) = hyb_coeff_vals(l);
     hyb_coeffs(l, 3, 2) = hyb_coeff_vals(l);
   }
-  auto hyb_refl_coeffs = hyb_coeffs;
-
   nda::vector<double> hyb_poles(p);
   hyb_poles = {-2.537191963500981,  1.7111725610238615, -1.514666605887425, 1.04941790134832,
                -0.7410379494142222, 0.3763525311836938, -0.1312888711963961};
 
   // use coefs2vals to get hyb from hyb_coeffs and hyb_poles
-  auto hyb      = triqs_xca::hyb::coefs2vals(beta, Lambda, eps, hyb_coeffs, hyb_poles);
-  auto hyb_refl = hyb;
-  hyb_poles     = hyb_poles * beta;
+  auto hyb = triqs_xca::hyb::coefs2vals(beta, Lambda, eps, hyb_coeffs, hyb_poles);
 
+  hyb_poles = hyb_poles * beta;
+
+  // generic diagram evaluator
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  auto B                      = Backbone(topology, n);
+  auto Fset                   = DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
+  auto D                      = DenseDiagramEvaluator(beta, eps, itops, hyb_poles, hyb_coeffs, Fset);
+
+  D.eval_self_energy_by_pairs(Gt_dense, B); // evaluate OCA diagram
+  auto OCA_result = D.Sigma;                // get the result from the DiagramEvaluator
+
+  // hyb_refl is Delta(beta - tau), computed exactly via DLR reflection (no sign flip);
+  // the DLR coefficients describing it are unchanged (hyb_refl_coeffs = hyb_coeffs), since
+  // k_it(beta - tau, omega) = k_it(tau, -omega) means Delta(beta-tau) shares its coefficients
+  // with Delta(tau) once expressed w.r.t. the reflected pole indices used internally by OCA_dense.
+  auto hyb_refl         = nda::make_regular(itops.reflect(hyb));
+  auto hyb_refl_coeffs  = hyb_coeffs;
   auto OCA_dense_result = OCA_dense(hyb, hyb_coeffs, hyb_refl, hyb_refl_coeffs, hyb_poles, itops, beta, Gt_dense, Fs_dense, F_dags_dense);
 
+  // compare with the dense result
+  ASSERT_LE(nda::max_element(nda::abs(OCA_result - OCA_dense_result)), eps);
+
+  // also check that OCA_dense agrees with the older Sigma_Diagram_calc-based implementation,
+  // using Delta(beta - tau) = hyb_decomp(hyb_coeffs, -hyb_poles) for the reflected hybridization
+  // (the same Delta(beta-tau) that hyb_refl/hyb_refl_coeffs represent above)
   nda::vector<double> hyb_poles_reflect = -hyb_poles;
-  auto Delta_decomp                     = hyb_decomp(hyb_coeffs, hyb_poles, eps);              //decomposition of Delta(t) using DLR coefficient
-  auto Delta_decomp_reflect             = hyb_decomp(hyb_refl_coeffs, hyb_poles_reflect, eps); // decomposition of Delta(-t) using DLR coefficient
+  auto Delta_decomp                     = hyb_decomp(hyb_coeffs, hyb_poles, eps);              // decomposition of Delta(t) using DLR coefficients
+  auto Delta_decomp_reflect             = hyb_decomp(hyb_refl_coeffs, hyb_poles_reflect, eps); // decomposition of Delta(beta-t) using DLR coefficients
   hyb_F Delta_F(16, p, n);
   hyb_F Delta_F_reflect(16, p, n);
   auto dlr_it = itops.get_itnodes();
@@ -188,19 +207,7 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   auto OCA_backward     = Sigma_Diagram_calc(Delta_F, Delta_F_reflect, D2, hyb, hyb_refl, Gt_dense, itops, beta, Fs_dense, F_dags_dense, fb, true);
   auto OCA_old          = nda::make_regular(-OCA_forward - OCA_backward);
 
-  // check that dense OCA calculation agree with old
   ASSERT_LE(nda::max_element(nda::abs(OCA_dense_result - OCA_old)), eps);
-
-  // generic diagram evaluator
-  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
-  auto B                      = Backbone(topology, n);
-  auto Fset                   = DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
-  auto D                      = DenseDiagramEvaluator(beta, eps, itops, hyb_poles, hyb_coeffs, Fset);
-  D.eval_self_energy(Gt_dense, B); // evaluate OCA diagram
-  auto OCA_result = nda::make_regular(-D.Sigma);       // get the result from the DiagramEvaluator
-
-  // compare with the dense result
-  ASSERT_LE(nda::max_element(nda::abs(OCA_result - OCA_dense_result)), 2 * eps);
 }
 
 TEST(DenseBackbone, one_fermion_three_orders_const_hyb) {
@@ -225,7 +232,7 @@ TEST(DenseBackbone, one_fermion_three_orders_const_hyb) {
     double t  = rel2abs(dlr_it(i));
     G0_ana(i) = -exp(-t * std::numbers::ln2);
   }
-  for (int b = 0; b < 2; ++b) { ASSERT_LE(nda::max_element(nda::abs(one_fermion_model.G_ppsc_dense[0].data()(_, b, b) - G0_ana)), eps); }
+  for (int i = 0; i < 2; ++i) { ASSERT_LE(nda::max_element(nda::abs(G_ppsc_dense[0].data()(_, i, i) - G0_ana)), eps); }
 
   // Set up diagram evaluator for self-energy evaluation
   DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense);
@@ -340,19 +347,135 @@ TEST(DenseBackbone, one_fermion_three_orders_hyb_one_pole) {
   }
   ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, 0, 0) - third_order_se_ana(_, 0))), eps);
   ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, 1, 1) - third_order_se_ana(_, 1))), eps);
-  /*
+}
 
-  // compare individual index evals
-  int nd                  = D.get_num_self_energy_backbones(topology);
-  auto third_order_se_ind = D.compute_self_energy(G_ppsc_dense, topology, 0);
-  third_order_se_ind += D.compute_self_energy(G_ppsc_dense, topology, nd / 2);
-  auto third_order_se_ind_pair = D.compute_self_energy_by_pairs(G_ppsc_dense, topology, 0);
-  ASSERT_LE(nda::max_element(nda::abs(third_order_se_ind[0].data()(_, 0, 0) - third_order_se_ind_pair[0].data()(_, 0, 0))), eps);
-  for (int i = 2; i < nd; i += 2) {
-    third_order_se_ind = D.compute_self_energy(G_ppsc_dense, topology, i);
-    third_order_se_ind += D.compute_self_energy(G_ppsc_dense, topology, i + 1);
-    third_order_se_ind_pair = D.compute_self_energy_by_pairs(G_ppsc_dense, topology, i);
-    ASSERT_LE(nda::max_element(nda::abs(third_order_se_ind[0].data()(_, 0, 0) - third_order_se_ind_pair[0].data()(_, 0, 0))), eps);
+TEST(DenseBackbone, two_fermions_const_hyb_se) {
+  // Generate DLR imaginary-time object
+  double beta   = 2.0;
+  double Lambda = 20.0 * beta;
+  double eps    = 1.0e-10;
+  auto dlr_rf   = build_dlr_rf(Lambda, eps);
+  auto itops    = imtime_ops(Lambda, dlr_rf);
+  int r         = itops.rank();
+
+  // Two-fermion model with constant hybridization
+  auto two_fermion_model = two_fermion_model_dense_helper(beta, Lambda, eps, 0.0, 0.0, 0.0);
+  auto &G_ppsc_dense     = two_fermion_model.G_ppsc_dense;
+  auto &Fset_dense       = two_fermion_model.Fset_dense;
+  auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
+  auto &hyb_poles        = two_fermion_model.hyb_poles;
+
+  auto dlr_it = itops.get_itnodes();
+  auto G0_ana = nda::zeros<double>(r);
+  double ln4  = std::numbers::ln2 * 2;
+  for (int i = 0; i < r; ++i) {
+    double t  = rel2abs(dlr_it(i));
+    G0_ana(i) = -exp(-t * ln4);
   }
-  */
+  for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(G_ppsc_dense[0].data()(_, i, i) - G0_ana)), eps); }
+
+  // Set up diagram evaluator for self-energy evaluation
+  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense);
+
+  // ----- NCA test -----
+  nda::array<int, 2> topology1 = {{0, 1}};
+  auto nca_se                  = D.compute_self_energy_by_pairs(G_ppsc_dense, topology1);
+  auto nca_se_ana              = nda::zeros<double>(r);
+  nca_se_ana                   = -G0_ana;
+  for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(nca_se[0].data()(_, i, i) - nca_se_ana)), eps); }
+
+  // ----- OCA test -----
+  nda::array<int, 2> topology2 = {{0, 2}, {1, 3}};
+  auto oca_se                  = D.compute_self_energy_by_pairs(G_ppsc_dense, topology2);
+  auto oca_se_ana              = nda::zeros<double>(r);
+  for (int i = 0; i < r; ++i) {
+    double t      = rel2abs(dlr_it(i)); // t = tau / beta
+    oca_se_ana(i) = -0.25 * exp(-t * ln4) * t * t * beta * beta;
+  }
+  for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, i, i) - oca_se_ana)), eps); }
+
+  // ----- third-order test -----
+  nda::array<int, 2> topology3 = {{0, 3}, {1, 4}, {2, 5}};
+  auto third_order_se          = D.compute_self_energy_by_pairs(G_ppsc_dense, topology3);
+  auto third_order_se_ana      = nda::zeros<double>(r);
+  for (int i = 0; i < r; ++i) {
+    double t              = rel2abs(dlr_it(i)); // t = tau / beta
+    third_order_se_ana(i) = 1.0 / 96 * exp(-t * ln4) * pow(t, 4) * pow(beta, 4);
+  }
+  for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, i, i) - third_order_se_ana)), eps); }
+}
+
+TEST(DenseBackbone, two_fermions_one_hyb_pole_se) {
+  double beta   = 2.0;
+  double Lambda = 20.0 * beta;
+  double eps    = 1.0e-10;
+  auto dlr_rf   = build_dlr_rf(Lambda, eps);
+  auto itops    = imtime_ops(Lambda, dlr_rf);
+  int r         = itops.rank();
+
+  double om              = 0.8;
+  auto two_fermion_model = two_fermion_model_dense_helper(beta, Lambda, eps, 0.0, 0.0, om);
+  auto &G_ppsc_dense     = two_fermion_model.G_ppsc_dense;
+  auto &Fset_dense       = two_fermion_model.Fset_dense;
+  auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
+  auto &hyb_poles        = two_fermion_model.hyb_poles;
+
+  auto dlr_it = itops.get_itnodes();
+  auto G0_ana = nda::zeros<double>(r);
+  double ln4  = std::numbers::ln2 * 2;
+  double t    = 0;
+  double tom  = 0;
+  for (int i = 0; i < r; ++i) {
+    t         = rel2abs(dlr_it(i));
+    G0_ana(i) = -exp(-t * ln4);
+  }
+  for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(G_ppsc_dense[0].data()(_, i, i) - G0_ana)), eps); }
+
+  // Set up diagram evaluator for self-energy evaluation
+  DenseDiagramEvaluator D(beta, eps, itops, nda::make_regular(beta * hyb_poles), hyb_coeffs, Fset_dense);
+
+  // ----- NCA test -----
+  nda::array<int, 2> topology1 = {{0, 1}};
+  auto nca_se                  = D.compute_self_energy_by_pairs(G_ppsc_dense, topology1);
+  auto nca_se_ana              = nda::zeros<double>(r, 4); // matrix is diagonal --- only store diagonal entries
+  double exp_minus_beta_om     = exp(-beta * om);
+  double exp_beta_om           = exp(beta * om);
+  double minus_term            = 0;
+  double plus_term             = 0;
+  for (int i = 0; i < r; ++i) {
+    t                = rel2abs(dlr_it(i)); // t = tau / beta
+    tom              = t * om;
+    minus_term       = exp(-t * ln4) * exp(-beta * tom) / (exp_minus_beta_om + 1);
+    plus_term        = exp(-t * ln4) * exp(beta * tom) / (exp_beta_om + 1);
+    nca_se_ana(i, 0) = 2 * plus_term;
+    nca_se_ana(i, 1) = plus_term + minus_term;
+    nca_se_ana(i, 2) = plus_term + minus_term;
+    nca_se_ana(i, 3) = 2 * minus_term;
+  }
+  for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(nca_se[0].data()(_, i, i) - nca_se_ana(_, i))), eps); }
+
+  // ----- OCA test -----
+  nda::array<int, 2> topology2 = {{0, 2}, {1, 3}};
+  auto oca_se                  = D.compute_self_energy_by_pairs(G_ppsc_dense, topology2);
+  auto oca_se_ana              = nda::zeros<double>(r, 3); // matrix is diagonal --- only store diagonal entries
+  double exp_om_tau            = 0;
+  double exp_2_om_tau          = 0;
+  double denom                 = 0;
+  double exp_2_beta_om         = exp(2 * beta * om);
+
+  for (int i = 0; i < r; ++i) {
+    t                = rel2abs(dlr_it(i)); // t = tau / beta
+    exp_om_tau       = exp(om * t * beta);
+    exp_2_om_tau     = exp_om_tau * exp_om_tau;
+    denom            = exp(ln4 * t) * om * om * (exp_2_beta_om + 2 * exp_beta_om + 1);
+    oca_se_ana(i, 0) = -2.0 * exp_om_tau * (-om * t * beta + exp_om_tau - 1) / denom;
+    oca_se_ana(i, 1) = exp_beta_om * (-exp_2_om_tau + 2 * exp_om_tau - 1) / (exp_om_tau * denom);
+    oca_se_ana(i, 2) = -2.0 * exp_2_beta_om * (om * t * beta * exp_om_tau - exp_om_tau + 1) / (exp_2_om_tau * denom);
+  }
+  ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 0, 0) - oca_se_ana(_, 0))), eps);
+  ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 1, 1) - oca_se_ana(_, 1))), eps);
+  ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 2, 2) - oca_se_ana(_, 1))), eps);
+  ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 3, 3) - oca_se_ana(_, 2))), eps);
+
+  // ----- third-order test ----- TODO?
 }

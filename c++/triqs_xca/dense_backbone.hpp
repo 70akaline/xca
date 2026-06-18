@@ -106,6 +106,17 @@ namespace triqs_xca::dense {
     // get number of backbones for given topology
     int get_num_self_energy_backbones(nda::array_const_view<int, 2> topology);
 
+    // get the flat indices f_ix for which eval_self_energy_fixed_index_pair(f_ix) covers
+    // exactly one pair of diagrams (i.e., those with fb_ix = f_ix / n_p even, where
+    // n_p = o_ix_max * p_ix_max); suitable for use with compute_self_energy_by_pairs(f_ix_vec)
+    nda::array<int, 1> get_self_energy_pair_indices(nda::array_const_view<int, 2> topology);
+
+    // temporary debugging getters: expose the hybridization function values at the
+    // DLR imaginary time nodes, as reconstructed from (poles, coeffs)
+    nda::array<dcomplex, 3> get_hyb_values();
+    nda::array<dcomplex, 3> get_hyb_values_reflect();
+    nda::vector<double> get_hyb_poles();
+
     // evaluate the mu, kap entries of a correlator for a diagram of a given order and topology in dense storage
     C2PY_IGNORE nda::array<dcomplex, 3> eval_correlator(nda::array_const_view<dcomplex, 3> Gt, CorrelatorBackbone &backbone,
                                                         nda::array<dcomplex, 3> mu_ops, nda::array<dcomplex, 3> kap_ops, bool is_fermionic = true);
