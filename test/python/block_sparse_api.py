@@ -85,7 +85,10 @@ def test_oca_diagram_cf_block_sparse_and_dense(beta=2.0, verbose=False):
     
     # -- Hybridization function and adapol fit
 
-    mesh_w = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=eps)
+    dlr_symmetrize = False
+    mesh_w = MeshDLRImFreq(
+        beta=beta, statistic='Fermion', w_max=w_max, eps=eps,
+        symmetrize=dlr_symmetrize)
     Delta_w = Gf(mesh=mesh_w, target_shape=[2]*2)
     iwn = np.array([ complex(x) for x in mesh_w ])
     Delta_w.data[:] = make_Delta_with_cont_spec_mat(iwn, semicircular, a=a, b=b, r0=r0, eps=eps)[:, :2, :2]
@@ -98,6 +101,7 @@ def test_oca_diagram_cf_block_sparse_and_dense(beta=2.0, verbose=False):
     BSS = BlockSparseSolver(
         H, beta, w_max, eps, gf_struct=gf_struct,
         conserved_operators=[N_up, N_dn],
+        dlr_symmetrize=dlr_symmetrize,
         )
 
     BSS.Delta_tau['up'] << Delta_tau
@@ -109,7 +113,9 @@ def test_oca_diagram_cf_block_sparse_and_dense(beta=2.0, verbose=False):
     
     # -- Dense solver
 
-    S = TriqsSolver(beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max)
+    S = TriqsSolver(
+        beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max,
+        dlr_symmetrize=dlr_symmetrize)
 
     for sidx in spin_names:
         S.Delta_tau[sidx] << Delta_tau

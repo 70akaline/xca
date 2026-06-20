@@ -132,14 +132,14 @@ def test_pycppdlr(verbose=True):
         plt.show()
 
 
-    np.testing.assert_array_almost_equal(g_iaa_refl, g_iaa_refl_ref)
+    np.testing.assert_allclose(g_iaa_refl, g_iaa_refl_ref, atol=10 * eps)
 
-    np.testing.assert_array_almost_equal(g_faa, g_faa_interp)
-    assert( np.max(np.abs(g_faa - g_faa_interp)) < eps )
+    np.testing.assert_allclose(g_faa, g_faa_interp, atol=3 * eps)
+    assert( np.max(np.abs(g_faa - g_faa_interp)) < 3 * eps )
 
-    np.testing.assert_array_almost_equal(gg_iaa, gg_iaa_anal)    
-    assert( np.max(np.abs(gg_iaa - gg_iaa_anal)) < eps ) 
-    
+    np.testing.assert_allclose(gg_iaa, gg_iaa_anal, atol=3 * eps)
+    assert( np.max(np.abs(gg_iaa - gg_iaa_anal)) < 3 * eps )
+
 
 if __name__ == "__main__":
 

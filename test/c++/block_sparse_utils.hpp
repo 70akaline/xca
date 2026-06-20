@@ -35,7 +35,7 @@ struct FermionModelData {
  * @param[in] hyb_pole Pole value for the single-pole hybridization decomposition
  * @return FermionModelData containing hybridization coefficients/poles, atom_diag object, and non-interacting propagators
  */
-FermionModelData one_fermion_model_helper(double beta, double Lambda, double eps, double hyb_pole = 0.0);
+FermionModelData one_fermion_model_helper(double beta, double Lambda, double eps, double hyb_pole = 0.0, bool dlr_symmetrize = true);
 
 /**
  * @brief Helper function for setting up a two-fermion model with interaction U * n0 * n1 and one-pole hybridization
@@ -47,7 +47,8 @@ FermionModelData one_fermion_model_helper(double beta, double Lambda, double eps
  * @param[in] hyb_pole Pole value for the single-pole hybridization decomposition
  * @return FermionModelData containing hybridization coefficients/poles, atom_diag object, and non-interacting propagator
  */
-FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps, double U = 3.0, double mu = 0.0, double hyb_pole = -1.5);
+FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps, double U = 3.0, double mu = 0.0, double hyb_pole = -1.5,
+                                          bool dlr_symmetrize = true);
 
 /**
  * @brief Helper function for setting up the one-fermion test model with trivial atomic Hamiltonian H = 0, using dense operator storage
@@ -57,7 +58,8 @@ FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps
  * @param[in] hyb_pole Pole value for the single-pole hybridization decomposition
  * @return DenseFermionModelData containing hybridization coefficients/poles, atom_diag object, and non-interacting propagators in dense storage
  */
-DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda, double eps, double hyb_pole = 0.0);
+DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda, double eps, double hyb_pole = 0.0,
+                                                     bool dlr_symmetrize = true);
 
 /**
  * @brief Helper function for setting up a two-fermion model with interaction U * n0 * n1 and one-pole hybridization, using dense operator storage
@@ -69,7 +71,8 @@ DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda,
  * @param[in] hyb_pole Pole value for the single-pole hybridization decomposition
  * @return DenseFermionModelData containing hybridization coefficients/poles, atom_diag object
  */
-DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda, double eps, double U = 3.0, double mu = 0.0, double hyb_pole = -1.5);
+DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda, double eps, double U = 3.0, double mu = 0.0,
+                                                     double hyb_pole = -1.5, bool dlr_symmetrize = true);
 
 /**
  * @brief Convert a Hamiltonian matrix to a non-interacting Green's function matrix in dense storage
@@ -87,7 +90,8 @@ nda::array<dcomplex, 3> Hmat_to_Gtmat(nda::array<dcomplex, 2> Hmat, double beta,
  * @param[in] eps DLR epsilon parameter
  * @return Tuple of hybridization function and its reflection
  */
-std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helper(double beta, double Lambda, double eps);
+std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helper(double beta, double Lambda, double eps,
+                                                                                  bool dlr_symmetrize = true);
 
 /**
  * @brief Helper function for setting up the discrete bath hybridization function used in spin-flip-fermion tests
@@ -97,7 +101,8 @@ std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helpe
  * @param[in] n 2 * number of orbitals
  * @return Tuple of hybridization function and its reflection
  */
-std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_spin_flip_helper(double beta, double Lambda, double eps, int n);
+std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_spin_flip_helper(double beta, double Lambda, double eps, int n,
+                                                                                            bool dlr_symmetrize = true);
 
 /**
  * @brief Helper function for setting up the two-band model's atom_diag object
@@ -112,7 +117,8 @@ triqs::atom_diag::atom_diag<true> two_band_atom_diag_helper();
  * @param[in] eps DLR epsilon parameter
  * @return Tuple of non-interacting Green's function in dense storage, annihilation operators in dense storage, and creation operators in dense storage
  */
-std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps);
+std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps,
+                                                                                                           bool dlr_symmetrize = true);
 
 /**
  * @brief Helper function for setting up the two-band model

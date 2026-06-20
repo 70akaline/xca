@@ -326,18 +326,19 @@ namespace triqs_xca::atom_diag {
     return {ap_blocks, zero_block_indices};
   }
 
-  triqs::gfs::block_gf<triqs::mesh::dlr_imtime> ad_to_atom_prop(const triqs_atom_diag &ad, double beta, double Lambda, double eps) {
+  triqs::gfs::block_gf<triqs::mesh::dlr_imtime> ad_to_atom_prop(const triqs_atom_diag &ad, double beta, double Lambda, double eps,
+                                                                bool dlr_symmetrize) {
     // Get Hamiltonian blocks and block indices
     auto [H_blocks, H_block_inds] = get_hamiltonian_blocks(ad);
 
     // Compute atomic propagator blocks
-    auto dlr_rf                                    = cppdlr::build_dlr_rf(Lambda, eps, true);
-    auto itops                                     = imtime_ops(Lambda, dlr_rf, true);
+    auto dlr_rf                                    = cppdlr::build_dlr_rf(Lambda, eps, dlr_symmetrize);
+    auto itops                                     = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
     std::vector<nda::array<dcomplex, 3>> ap_blocks = H_to_atom_prop_blocks<dcomplex>(H_blocks, H_block_inds, beta, itops);
 
     // Create vector of gf<dlr_imtime>
     std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_blocks(H_block_inds.size());
-    triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps, true);
+    triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps, dlr_symmetrize);
     for (int i = 0; i < H_block_inds.size(); ++i) { gf_blocks[i] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, ap_blocks[i]); }
     return {gf_blocks};
   }

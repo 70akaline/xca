@@ -146,7 +146,7 @@ class TriqsSolver:
 
         """
 
-        if hasattr(kwargs, 'verbose'):
+        if 'verbose' in kwargs:
             verbose = kwargs['verbose']
         else:
             verbose = True

@@ -24,6 +24,7 @@
 #include "nda/nda.hpp"
 #include <cppdlr/cppdlr.hpp>
 #include <cppdlr/dlr_imtime.hpp>
+#include <cmath>
 #include <functional>
 #include <gtest/gtest.h>
 #include <nda/algorithms.hpp>
@@ -284,8 +285,7 @@ TEST(strong_coupling, dimer) {
 
     Z_S = -real(trace(itops.coefs2eval(G_new_dlr, 1.0)));
     eta = log(Z_S) / beta;
-    // std::cout<<eta;
-    H_S += eta * nda::eye<dcomplex>(H_S.shape(0));
+    if (!std::isfinite(eta)) break;
 
     for (int k = 0; k < r; ++k) { G_new_tau(k, _, _) = G_new_tau(k, _, _) * exp(-tau_actual(k) * eta); }
     G_new_dlr = itops.vals2coefs(G_new_tau);

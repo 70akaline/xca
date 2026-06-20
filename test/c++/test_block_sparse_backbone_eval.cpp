@@ -144,11 +144,12 @@ TEST(Backbone, one_fermion_three_orders_const_hyb) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
-  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps);
+  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.0, dlr_symmetrize);
   auto &hyb_coeffs       = one_fermion_model.hyb_coeffs;
   auto &hyb_poles        = one_fermion_model.hyb_poles;
   auto &ad               = one_fermion_model.ad;
@@ -209,11 +210,12 @@ TEST(Backbone, one_fermion_three_orders_hyb_one_pole) {
   double eps    = 1.0e-10;
 
   // Generate DLR imaginary-time object
-  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
-  auto itops  = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r       = itops.rank();
 
-  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.8);
+  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.8, dlr_symmetrize);
   auto &hyb_coeffs       = one_fermion_model.hyb_coeffs;
   auto &hyb_poles        = one_fermion_model.hyb_poles;
   auto &ad               = one_fermion_model.ad;

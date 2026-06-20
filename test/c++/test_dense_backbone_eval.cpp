@@ -86,13 +86,14 @@ TEST(DenseBackbone, third_order_manual) {
   double beta   = 2.0;
   double Lambda = 10.0 * beta; // 1000.0*beta;
   double eps    = 1.0e-10;
+  bool dlr_symmetrize = false;
 
-  auto [Deltat, Deltat_refl]              = discrete_bath_helper(beta, Lambda, eps);
-  auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
+  auto [Deltat, Deltat_refl]              = discrete_bath_helper(beta, Lambda, eps, dlr_symmetrize);
+  auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps, dlr_symmetrize);
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
-  auto itops         = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops         = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -112,7 +113,7 @@ TEST(DenseBackbone, third_order_manual) {
   nda::vector<int> fb{1, 1, 1}, pole_inds{7, 9};
   B.set_directions(fb);
   B.set_pole_inds(pole_inds, dlr_rf);
-  auto D = DenseDiagramEvaluator(beta, eps, itops, dlr_rf, hyb_coeffs, Fset);
+  auto D = DenseDiagramEvaluator(beta, eps, itops, dlr_rf, hyb_coeffs, Fset, dlr_symmetrize);
 
   // perform the same calculation using the a routine called by eval_diagram_dense()
   nda::array<dcomplex, 3> T(r, N, N), GKt(r, N, N), Tmu(r, N, N), Sigma_generic(r, N, N);
@@ -136,12 +137,13 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   double beta   = 8.0;
   double Lambda = 10.0 * beta;
   double eps    = 1.0e-10;
+  bool dlr_symmetrize = false;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
-  auto itops  = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops  = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
 
-  auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
+  auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps, dlr_symmetrize);
 
   int p = 7;
   int n = 4;
@@ -164,7 +166,7 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
                -0.7410379494142222, 0.3763525311836938, -0.1312888711963961};
 
   // use coefs2vals to get hyb from hyb_coeffs and hyb_poles
-  auto hyb = triqs_xca::hyb::coefs2vals(beta, Lambda, eps, hyb_coeffs, hyb_poles);
+  auto hyb = triqs_xca::hyb::coefs2vals(beta, itops, hyb_coeffs, hyb_poles);
 
   hyb_poles = hyb_poles * beta;
 
@@ -172,7 +174,7 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   nda::array<int, 2> topology = {{0, 2}, {1, 3}};
   auto B                      = Backbone(topology, n);
   auto Fset                   = DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
-  auto D                      = DenseDiagramEvaluator(beta, eps, itops, hyb_poles, hyb_coeffs, Fset);
+  auto D                      = DenseDiagramEvaluator(beta, eps, itops, hyb_poles, hyb_coeffs, Fset, dlr_symmetrize);
 
   D.eval_self_energy_by_pairs(Gt_dense, B); // evaluate OCA diagram
   auto OCA_result = D.Sigma;                // get the result from the DiagramEvaluator
@@ -215,11 +217,12 @@ TEST(DenseBackbone, one_fermion_three_orders_const_hyb) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
-  auto one_fermion_model = one_fermion_model_dense_helper(beta, Lambda, eps);
+  auto one_fermion_model = one_fermion_model_dense_helper(beta, Lambda, eps, 0.0, dlr_symmetrize);
   auto &G_ppsc_dense     = one_fermion_model.G_ppsc_dense;
   auto &Fset_dense       = one_fermion_model.Fset_dense;
   auto &hyb_coeffs       = one_fermion_model.hyb_coeffs;
@@ -235,7 +238,7 @@ TEST(DenseBackbone, one_fermion_three_orders_const_hyb) {
   for (int i = 0; i < 2; ++i) { ASSERT_LE(nda::max_element(nda::abs(G_ppsc_dense[0].data()(_, i, i) - G0_ana)), eps); }
 
   // Set up diagram evaluator for self-energy evaluation
-  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense);
+  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense, dlr_symmetrize);
 
   // ----- NCA test -----
   nda::array<int, 2> topology1 = {{0, 1}};
@@ -287,11 +290,12 @@ TEST(DenseBackbone, one_fermion_three_orders_hyb_one_pole) {
   double eps    = 1.0e-10;
 
   // Generate DLR imaginary-time object
-  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
-  auto itops  = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r       = itops.rank();
 
-  auto one_fermion_model = one_fermion_model_dense_helper(beta, Lambda, eps, 0.8);
+  auto one_fermion_model = one_fermion_model_dense_helper(beta, Lambda, eps, 0.8, dlr_symmetrize);
   auto &G_ppsc_dense     = one_fermion_model.G_ppsc_dense;
   auto &Fset_dense       = one_fermion_model.Fset_dense;
   auto &hyb_coeffs       = one_fermion_model.hyb_coeffs;
@@ -305,7 +309,7 @@ TEST(DenseBackbone, one_fermion_three_orders_hyb_one_pole) {
   }
 
   // Set up diagram evaluator for self-energy evaluation
-  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense);
+  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense, dlr_symmetrize);
 
   // ----- NCA test -----
   nda::array<int, 2> topology1 = {{0, 1}};
@@ -354,12 +358,13 @@ TEST(DenseBackbone, two_fermions_const_hyb_se) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
   // Two-fermion model with constant hybridization
-  auto two_fermion_model = two_fermion_model_dense_helper(beta, Lambda, eps, 0.0, 0.0, 0.0);
+  auto two_fermion_model = two_fermion_model_dense_helper(beta, Lambda, eps, 0.0, 0.0, 0.0, dlr_symmetrize);
   auto &G_ppsc_dense     = two_fermion_model.G_ppsc_dense;
   auto &Fset_dense       = two_fermion_model.Fset_dense;
   auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
@@ -375,7 +380,7 @@ TEST(DenseBackbone, two_fermions_const_hyb_se) {
   for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(G_ppsc_dense[0].data()(_, i, i) - G0_ana)), eps); }
 
   // Set up diagram evaluator for self-energy evaluation
-  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense);
+  DenseDiagramEvaluator D(beta, eps, itops, hyb_poles, hyb_coeffs, Fset_dense, dlr_symmetrize);
 
   // ----- NCA test -----
   nda::array<int, 2> topology1 = {{0, 1}};
@@ -409,12 +414,13 @@ TEST(DenseBackbone, two_fermions_one_hyb_pole_se) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
   double om              = 0.8;
-  auto two_fermion_model = two_fermion_model_dense_helper(beta, Lambda, eps, 0.0, 0.0, om);
+  auto two_fermion_model = two_fermion_model_dense_helper(beta, Lambda, eps, 0.0, 0.0, om, dlr_symmetrize);
   auto &G_ppsc_dense     = two_fermion_model.G_ppsc_dense;
   auto &Fset_dense       = two_fermion_model.Fset_dense;
   auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
@@ -432,7 +438,7 @@ TEST(DenseBackbone, two_fermions_one_hyb_pole_se) {
   for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(G_ppsc_dense[0].data()(_, i, i) - G0_ana)), eps); }
 
   // Set up diagram evaluator for self-energy evaluation
-  DenseDiagramEvaluator D(beta, eps, itops, nda::make_regular(beta * hyb_poles), hyb_coeffs, Fset_dense);
+  DenseDiagramEvaluator D(beta, eps, itops, nda::make_regular(beta * hyb_poles), hyb_coeffs, Fset_dense, dlr_symmetrize);
 
   // ----- NCA test -----
   nda::array<int, 2> topology1 = {{0, 1}};

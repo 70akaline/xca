@@ -15,7 +15,7 @@ using cppdlr::rel2abs;
 using triqs_xca::block_sparse::BlockOpSymSet;
 using triqs_xca::block_sparse::nonint_gf_BDOF;
 
-FermionModelData one_fermion_model_helper(double beta, double Lambda, double eps, double hyb_pole) {
+FermionModelData one_fermion_model_helper(double beta, double Lambda, double eps, double hyb_pole, bool dlr_symmetrize) {
   // Helper function for setting up one-fermion tests with H = 0 and a one-pole hybridization decomposition.
   int p    = 1;
   int norb = 1;
@@ -37,13 +37,13 @@ FermionModelData one_fermion_model_helper(double beta, double Lambda, double eps
   fop_set.insert("0", 0);
   auto ad = triqs::atom_diag::atom_diag<true>(H, fop_set);
 
-  auto G_ppsc = triqs_xca::atom_diag::ad_to_atom_prop(ad, beta, Lambda, eps);
+  auto G_ppsc = triqs_xca::atom_diag::ad_to_atom_prop(ad, beta, Lambda, eps, dlr_symmetrize);
   auto G_bdof = BlockDiagOpFun(G_ppsc);
 
   return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc = G_ppsc, .G_bdof = G_bdof};
 }
 
-FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps, double U, double mu, double hyb_pole) {
+FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps, double U, double mu, double hyb_pole, bool dlr_symmetrize) {
   // Helper function for setting up two-fermion tests with H = -mu * (n0 + n1) + U * n0 * n1 and one-pole hybridization.
   using triqs::operators::many_body_operator_complex;
   using triqs::operators::n;
@@ -69,14 +69,14 @@ FermionModelData two_fermion_model_helper(double beta, double Lambda, double eps
   nda::vector<double> hyb_poles(p);
   hyb_poles = hyb_pole;
 
-  auto G_ppsc = triqs_xca::atom_diag::ad_to_atom_prop(ad, beta, Lambda, eps);
+  auto G_ppsc = triqs_xca::atom_diag::ad_to_atom_prop(ad, beta, Lambda, eps, dlr_symmetrize);
 
   auto G_bdof = BlockDiagOpFun(G_ppsc);
 
   return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc = G_ppsc, .G_bdof = G_bdof};
 }
 
-DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda, double eps, double hyb_pole) {
+DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda, double eps, double hyb_pole, bool dlr_symmetrize) {
   // Helper function for setting up one-fermion tests with H = 0 and one-pole hybridization, with dense storage for the non-interacting propagators.
 
   int p    = 1;
@@ -100,8 +100,8 @@ DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda,
 
   auto ad                       = triqs::atom_diag::atom_diag<true>(H, fop_set);
   auto H_dense                  = triqs_xca::atom_diag::get_full_h_atomic(ad);
-  auto dlr_rf                   = build_dlr_rf(Lambda, eps, true);
-  auto itops                    = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf                   = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops                    = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   auto const &dlr_it            = itops.get_itnodes();
   auto dlr_it_abs               = rel2abs(dlr_it);
   auto Gt_dense                 = Hmat_to_Gtmat(H_dense, beta, dlr_it_abs);
@@ -109,14 +109,15 @@ DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda,
   auto Fset_dense               = triqs_xca::atom_diag::DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
 
   std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_block(1);
-  triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps);
+  triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps, dlr_symmetrize);
   gf_block[0] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, Gt_dense);
   auto G_ppsc_dense = triqs::gfs::block_gf<triqs::mesh::dlr_imtime>(gf_block);
 
   return {.hyb_coeffs = hyb_coeffs, .hyb_poles = hyb_poles, .ad = ad, .G_ppsc_dense = G_ppsc_dense, .Fset_dense = Fset_dense};
 }
 
-DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda, double eps, double U, double mu, double hyb_pole) {
+DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda, double eps, double U, double mu, double hyb_pole,
+                                                     bool dlr_symmetrize) {
   // Helper function for setting up two-fermion tests with H = -mu * (n0 + n1) + U * n0 * n1 and one-pole hybridization, with dense storage for the non-interacting propagators.
 
   using triqs::operators::many_body_operator_complex;
@@ -144,8 +145,8 @@ DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda,
   hyb_poles = hyb_pole;
 
   auto H_dense                  = triqs_xca::atom_diag::get_full_h_atomic(ad);
-  auto dlr_rf                   = build_dlr_rf(Lambda, eps, true);
-  auto itops                    = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf                   = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops                    = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   auto const &dlr_it            = itops.get_itnodes();
   auto dlr_it_abs               = rel2abs(dlr_it);
   auto Gt_dense                 = Hmat_to_Gtmat(H_dense, beta, dlr_it_abs);
@@ -153,7 +154,7 @@ DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda,
   auto Fset_dense               = triqs_xca::atom_diag::DenseFSet(Fs_dense, F_dags_dense, hyb_coeffs);
 
   std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_block(1);
-  triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps);
+  triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps, dlr_symmetrize);
   gf_block[0] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, Gt_dense);
   auto G_ppsc_dense = triqs::gfs::block_gf<triqs::mesh::dlr_imtime>(gf_block);
 
@@ -181,11 +182,12 @@ nda::array<dcomplex, 3> Hmat_to_Gtmat(nda::array<dcomplex, 2> Hmat, double beta,
   return Gt_mat;
 }
 
-std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helper(double beta, double Lambda, double eps) {
+std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helper(double beta, double Lambda, double eps,
+                                                                                  bool dlr_symmetrize) {
   // Helper function for setting up the discrete bath model
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
-  auto itops         = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops         = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = rel2abs(dlr_it);
   int r              = itops.rank();
@@ -226,11 +228,12 @@ std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helpe
   return std::make_tuple(Deltat, Deltat_refl);
 }
 
-std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_spin_flip_helper(double beta, double Lambda, double eps, int n) {
+std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_spin_flip_helper(double beta, double Lambda, double eps, int n,
+                                                                                            bool dlr_symmetrize) {
   // Helper function for setting up the discrete bath model
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
-  auto itops         = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops         = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -315,10 +318,11 @@ triqs::atom_diag::atom_diag<true> two_band_atom_diag_helper() {
   return ad;
 }
 
-std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps) {
+std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps,
+                                                                                                           bool dlr_symmetrize) {
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
-  auto itops         = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops         = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 

@@ -63,7 +63,10 @@ def test_diagrams_cf_block_sparse_and_dense(e1=-1.5, beta=2.0, conserved_operato
 
     from triqs.gf import MeshDLRImFreq
 
-    mesh_w = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=eps)
+    dlr_symmetrize = False
+    mesh_w = MeshDLRImFreq(
+        beta=beta, statistic='Fermion', w_max=w_max, eps=eps,
+        symmetrize=dlr_symmetrize)
     Delta_w = Gf(mesh=mesh_w, target_shape=[2]*2)
     iwn = np.array([ complex(x) for x in mesh_w ])
 
@@ -77,7 +80,9 @@ def test_diagrams_cf_block_sparse_and_dense(e1=-1.5, beta=2.0, conserved_operato
 
     # -- Dense solver
 
-    S = TriqsSolver(beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max)
+    S = TriqsSolver(
+        beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max,
+        dlr_symmetrize=dlr_symmetrize)
 
     S.Delta_tau['0'] << Delta_tau
 
@@ -89,6 +94,7 @@ def test_diagrams_cf_block_sparse_and_dense(e1=-1.5, beta=2.0, conserved_operato
     BSS = BlockSparseSolver(
         H, beta, w_max, eps, gf_struct=gf_struct,
         conserved_operators=conserved_operators, # calling DiagramEvaluator with a list of operators segfaults!
+        dlr_symmetrize=dlr_symmetrize,
         )
 
     BSS.Delta_tau['0'] << Delta_tau

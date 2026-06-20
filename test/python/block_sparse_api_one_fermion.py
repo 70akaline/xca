@@ -139,7 +139,10 @@ def test_oca_diagram_cf_block_sparse_and_dense(
     
     print(f'conserved_operators = {conserved_operators}')    
     
-    mesh_w = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=eps)
+    dlr_symmetrize = False
+    mesh_w = MeshDLRImFreq(
+        beta=beta, statistic='Fermion', w_max=w_max, eps=eps,
+        symmetrize=dlr_symmetrize)
     Delta_w = Gf(mesh=mesh_w, target_shape=[1]*2)
 
     Delta_w << inverse(iOmega_n - e1)
@@ -150,7 +153,9 @@ def test_oca_diagram_cf_block_sparse_and_dense(
 
     # -- Dense solver
 
-    S = TriqsSolver(beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max)
+    S = TriqsSolver(
+        beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max,
+        dlr_symmetrize=dlr_symmetrize)
 
     S.Delta_tau['0'] << Delta_tau
 
@@ -162,6 +167,7 @@ def test_oca_diagram_cf_block_sparse_and_dense(
     BSS = BlockSparseSolver(
         H, beta, w_max, eps, gf_struct=gf_struct,
         conserved_operators=conserved_operators,
+        dlr_symmetrize=dlr_symmetrize,
         )
 
     BSS.Delta_tau['0'] << Delta_tau

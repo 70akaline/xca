@@ -150,7 +150,7 @@ namespace triqs_xca::dense {
        * @param[in] Fset DenseFSet (cre/ann operators with and without bars)
        */
     C2PY_IGNORE DenseDiagramEvaluator(double beta, double eps, imtime_ops &itops, nda::vector_const_view<double> hyb_poles,
-                                      nda::array_const_view<dcomplex, 3> hyb_coeffs, DenseFSet &Fset);
+                                      nda::array_const_view<dcomplex, 3> hyb_coeffs, DenseFSet &Fset, bool dlr_symmetrize = true);
 
     /**
        * @brief Constructor for DiagramEvaluator

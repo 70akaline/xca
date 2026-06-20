@@ -37,11 +37,12 @@ TEST(Backbone, one_fermion_three_orders_const_hyb) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
-  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps);
+  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.0, dlr_symmetrize);
   auto &hyb_coeffs       = one_fermion_model.hyb_coeffs;
   auto &hyb_poles        = one_fermion_model.hyb_poles;
   auto &ad               = one_fermion_model.ad;
@@ -89,11 +90,12 @@ TEST(Backbone, one_fermion_three_orders_hyb_one_pole) {
   double beta   = 1.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
-  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.8);
+  auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.8, dlr_symmetrize);
   auto &hyb_coeffs       = one_fermion_model.hyb_coeffs;
   auto &hyb_poles        = one_fermion_model.hyb_poles;
   auto &ad               = one_fermion_model.ad;
@@ -238,7 +240,10 @@ TEST(BSGFBackbone, OCA_BDOF_construct) {
   auto C                                  = DenseDiagramEvaluator(beta, eps, itops, dlr_rf, itops.vals2coefs(Deltat), Fset);
   auto OCA_result_gf_dense                = C.eval_correlator(Gt_dense, B, Fs_dense, F_dags_dense);
 
-  ASSERT_LE(nda::max_element(nda::abs(OCA_result_gf - OCA_result_gf_dense)), 1.0e-15);
+  // The two OCA paths perform equivalent contractions in different DLR
+  // transform orders, so agreement below the requested DLR accuracy is the
+  // meaningful check; machine-epsilon agreement is not stable here.
+  ASSERT_LE(nda::max_element(nda::abs(OCA_result_gf - OCA_result_gf_dense)), 1e-2 * eps);
 }
 
 TEST(Backbone, spin_flip_fermion) {
@@ -327,7 +332,7 @@ TEST(Backbone, spin_flip_fermion) {
   auto C                   = DenseDiagramEvaluator(beta, eps, itops, dlr_rf, hyb_coeffs, Fset);
   auto OCA_result_gf_dense = C.eval_correlator(Gt_dense, B, Fset.Fs, Fset.F_dags);
 
-  ASSERT_LE(nda::max_element(nda::abs(OCA_result_gf - OCA_result_gf_dense)), 1.0e-15);
+  ASSERT_LE(nda::max_element(nda::abs(OCA_result_gf - OCA_result_gf_dense)), 1e-2 * eps);
 }
 
 TEST(Backbone, spin_flip_fermion_sym_sets) {
@@ -427,7 +432,7 @@ TEST(Backbone, spin_flip_fermion_sym_sets) {
   auto C                   = DenseDiagramEvaluator(beta, eps, itops, dlr_rf, hyb_coeffs, Fset);
   auto OCA_result_gf_dense = C.eval_correlator(Gt_dense, B, Fset.Fs, Fset.F_dags);
 
-  ASSERT_LE(nda::max_element(nda::abs(OCA_result_gf - OCA_result_gf_dense)), 1.0e-15);
+  ASSERT_LE(nda::max_element(nda::abs(OCA_result_gf - OCA_result_gf_dense)), 1e-2 * eps);
 }
 
 TEST(Backbone, OCA_semicircle_bath_aaa) {

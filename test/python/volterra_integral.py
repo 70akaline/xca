@@ -29,9 +29,9 @@ def test_const_GG_volterra_integral_DLR(
     err = np.max(np.abs(GG_err['0'].data))
     print(f'beta = {beta:2.2E}, eps = {eps:2.2E}, w_max = {w_max:2.2E}, err = {err:2.2E}, err/eps = {err/eps:2.2E}')
 
-    # NB! We get two or more decimals of accuracy than eps
-    # (that is a good -- but surprising -- thing)
-    assert( err < 1e-2 * eps ) 
+    # NB! We usually get two or more decimals of accuracy than eps, until the
+    # Volterra integral reaches the double-precision roundoff floor.
+    assert( err < max(1e-2 * eps, 512 * np.finfo(float).eps) )
     
     if verbose:
         from triqs.plot.mpl_interface import oplot, plt, oplotr, oploti

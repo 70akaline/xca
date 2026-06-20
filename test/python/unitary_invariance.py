@@ -61,12 +61,13 @@ def get_ppsc_soe_gf(H, delta_iaa, beta, order=1, ntau=100):
     
     lamb, eps = 100., 1e-12
 
-    dlr_rf = build_dlr_rf(lamb, eps, True)
-    ito = ImTimeOps(lamb, dlr_rf, symmetrize=True)
+    dlr_symmetrize = False
+    dlr_rf = build_dlr_rf(lamb, eps, dlr_symmetrize)
+    ito = ImTimeOps(lamb, dlr_rf, symmetrize=dlr_symmetrize)
     
     fundamental_operators = [c(0,0), c(0, 1)]
     
-    S = Solver(beta, lamb, eps, H, fundamental_operators)
+    S = Solver(beta, lamb, eps, H, fundamental_operators, dlr_symmetrize=dlr_symmetrize)
 
     S.set_hybridization(
         delta_iaa, compress=True, Hermitian=True, verbose=True)
@@ -110,8 +111,9 @@ def test_unitary_symmetry_for_ppsc(order=1, verbose=False):
     fundamental_operators = [c(0,0), c(0, 1)]
 
     lamb, eps = 100., 1e-12
-    dlr_rf = build_dlr_rf(lamb, eps, True)
-    ito = ImTimeOps(lamb, dlr_rf, symmetrize=True)
+    dlr_symmetrize = False
+    dlr_rf = build_dlr_rf(lamb, eps, dlr_symmetrize)
+    ito = ImTimeOps(lamb, dlr_rf, symmetrize=dlr_symmetrize)
     fd = Fastdiagram(beta, lamb, ito, np.empty((0, 0, 0)), np.empty((0, 0, 0)))
     
     H1 = get_Hamiltonian()
