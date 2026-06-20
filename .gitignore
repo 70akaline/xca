@@ -6,3 +6,4 @@ cbuild
 cmake.sh
 .DS_store
 .ipynb_checkpoints
+.ace-tool/
