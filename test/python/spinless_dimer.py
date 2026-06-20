@@ -26,11 +26,7 @@ from triqs.gf import Gf, MeshImTime
 from triqs.operators import c, c_dag
 from pyed.TriqsExactDiagonalization import TriqsExactDiagonalization
 
-from triqs_xca.pycppdlr import build_dlr_rf
-from triqs_xca.pycppdlr import ImTimeOps
-
-from triqs_xca.impurity import Fastdiagram
-from triqs_xca.solver import Sigma_calc_loop, G_calc_loop, is_root
+from triqs_xca.solver import Solver, Sigma_calc_loop, G_calc_loop, is_root
 
 
 def spinless_dimer_ed(ntau=500, beta=1.0, t=1.0, ek=0.0, mu=0.01):
@@ -74,39 +70,27 @@ def calc_spinless_dimer(
 
     print(f'Order: {order}')
 
-    dlr_rf = build_dlr_rf(lamb, eps, True)
-    ito = ImTimeOps(lamb, dlr_rf, symmetrize=True)
-
     H = -mu * c_dag(0,0) * c(0,0)
     fundamental_operators = [ c(0,i) for i in range(1) ]
-    ed = TriqsExactDiagonalization(H, fundamental_operators, beta)
-
-    mat_c_dag = np.array(ed.rep.sparse_operators.c_dag[0].todense()) 
-    mat_c = mat_c_dag.T.conj()
-
-    F = np.array([mat_c])
-    F_dag = np.array([mat_c_dag])
     
-    fd = Fastdiagram(beta, lamb, ito, F, F_dag)
+    S = Solver(beta, lamb, eps, H, fundamental_operators, verbose=False)
+    fd = S.fd
+    ito = S.ito
 
     delta_iaa = t**2 * fd.free_greens(beta, np.array([[ek]]))
-    
-    fd.hyb_init(delta_iaa)
-    fd.hyb_decomposition()
+    S.set_hybridization(delta_iaa, verbose=False)
+    fd = S.fd
 
-    H_mat = np.array(ed.ed.H.todense())
-    I_mat = np.eye(H_mat.shape[0])
-    
-    G0_iaa = fd.free_greens_ppsc(beta, H_mat)
+    G0_iaa = S.G0_iaa
     G_iaa = G0_iaa.copy()
     
-    tau_i = fd.get_it_actual()
-    eta = 0.
+    tau_i = S.tau_i
 
     order_str = { 1 : 'NCA', 2 : 'OCA', 3 : 'TCA' }[order]
     
     for ppsc_iter in range(ppsc_maxiter):
 
+        S.G_iaa = G_iaa
         Sigma_iaa = fd.Sigma_calc(G_iaa, order_str)
 
         Sigma_iaa_ref = Sigma_calc_loop(fd, G_iaa, order)
@@ -118,12 +102,10 @@ def calc_spinless_dimer(
         np.testing.assert_array_almost_equal(Sigma_iaa, Sigma_iaa_ref)
         #exit()
         
-        G_iaa_new = fd.time_ordered_dyson(beta, H_mat, eta, Sigma_iaa)
-
-        Z = fd.partition_function(G_iaa_new)
-        deta = np.log(Z) / beta
-        G_iaa_new[:] *= np.exp(-tau_i * deta)[:, None, None]
-        eta += deta
+        # Match the production Solver eta normalization; the legacy log(Z)
+        # rescaling is unstable for the TCA spinless dimer.
+        S.eta = S.energyshift_newton(Sigma_iaa, tol=ppsc_tol, verbose=verbose)
+        G_iaa_new = S.solve_dyson(Sigma_iaa, S.eta, ppsc_tol, dmu=S.dmu)
 
         ppsc_diff = np.max(np.abs(G_iaa - G_iaa_new))
 
@@ -132,6 +114,8 @@ def calc_spinless_dimer(
         if is_root():
             print(f'PPSC: iter = {ppsc_iter:3d} diff = {ppsc_diff:2.2E}')
         if ppsc_diff < ppsc_tol: break
+
+    S.G_iaa = G_iaa
 
     g_iaa = fd.G_calc(G_iaa, order_str)
     n_orb = g_iaa.shape[-1]

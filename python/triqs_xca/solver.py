@@ -34,6 +34,7 @@ from .pycppdlr import ImTimeOps
 from .impurity import Fastdiagram
 from .dlr_dyson_ppsc import DysonItPPSC
 from .diag import all_connected_pairings
+from .mixing import DIISMixer
 
 from .ase.utils.timing import Timer, timer
 
@@ -552,7 +553,10 @@ class Solver(object):
         return diff
 
 
-    def solve(self, max_order, tol=1e-9, maxiter=100, update_eta_exact=True, mix=1.0, verbose=True, G0_iaa=None):
+    def solve(self, max_order, tol=1e-9, maxiter=100, update_eta_exact=True,
+              mix=1.0, verbose=True, G0_iaa=None, mixing='linear',
+              diis_history=6, diis_start=2, pulay_history=None,
+              pulay_start=None, diis_trust_radius=None):
 
         self.timer = Timer() # Reset timer for each solve call
 
@@ -576,8 +580,31 @@ class Solver(object):
             print()
             print(" iter |   conv   |    Z-1    ")
             print("------+----------+-----------")
+
+        if pulay_history is not None:
+            diis_history = pulay_history
+        if pulay_start is not None:
+            diis_start = pulay_start
+
+        mixing = mixing.lower()
+        if mixing == 'linear':
+            mixer = None
+        elif mixing in ('diis', 'pulay'):
+            mixer = DIISMixer(
+                history_size=diis_history, start=diis_start, mix=mix,
+                trust_radius=diis_trust_radius)
+        elif mixing == 'cdiis':
+            mixer = DIISMixer(
+                history_size=diis_history, start=diis_start, mix=1.0,
+                trust_radius=diis_trust_radius)
+        else:
+            raise ValueError("mixing must be 'linear', 'diis', or 'cdiis'")
+
+        accepted_sigma_iaa = None
         
         for iter in range(1, maxiter+1):
+
+            eta_old = self.eta
             
             #Sigma_iaa = Sigma_calc_loop(self.fd, self.G_iaa, max_order, verbose=verbose)
             Sigma_iaa = self.calc_Sigma(max_order, verbose=verbose > 1)
@@ -585,12 +612,20 @@ class Solver(object):
             if is_root() and verbose:
                 dyson_start_time = time.time()
 
+            if mixing == 'cdiis':
+                residual = self.__cdiis_commutator_residual(
+                    self.G_iaa, Sigma_iaa, eta_old, self.dmu)
+                if accepted_sigma_iaa is None:
+                    accepted_sigma_iaa = Sigma_iaa
+                Sigma_iaa = mixer.update(accepted_sigma_iaa, Sigma_iaa, residual=residual)
+                accepted_sigma_iaa = Sigma_iaa
+
             if update_eta_exact:
                 #self.eta = self.energyshift_newton(Sigma_iaa, tol=0.1*diff, verbose=verbose)
                 #self.eta = self.energyshift_bisection(Sigma_iaa, tol=tol, verbose=verbose)
                 self.eta = self.energyshift_newton(Sigma_iaa, tol=tol, verbose=verbose > 1)
                 G_iaa_new = self.solve_dyson(Sigma_iaa, self.eta, tol, dmu=self.dmu)
-                
+
             else:
                 G_iaa_new = self.solve_dyson(Sigma_iaa, self.eta, tol, dmu=self.dmu)
                 Z = self.partition_function(G_iaa_new)
@@ -607,20 +642,89 @@ class Solver(object):
             Z = self.partition_function(G_iaa_new)
 
             diff = np.max(np.abs(self.G_iaa - G_iaa_new))
-            
-            self.G_iaa = mix*G_iaa_new + (1-mix)*self.G_iaa
+
+            if mixer is None or mixing == 'cdiis':
+                self.G_iaa = mix*G_iaa_new + (1-mix)*self.G_iaa
+            else:
+                state = mixer.update(
+                    self.__pack_diis_state(self.G_iaa, eta_old),
+                    self.__pack_diis_state(G_iaa_new, self.eta))
+                self.G_iaa, self.eta = self.__unpack_diis_state(state, G_iaa_new.shape)
             #self.G_iaa = make_hermitian(self.G_iaa)
             self.Sigma_iaa = Sigma_iaa
 
             if is_root() and verbose > 0:
                 #print(f"PPSC: Z-1 = {Z-1:+2.2E}")
-                print(f' {iter:4d} | {diff:2.2E} | {Z-1:+2.2E}')
+                marker = '*' if mixer is not None and mixer.last_used_diis else ' '
+                print(f'{marker}{iter:4d} | {diff:2.2E} | {Z-1:+2.2E}')
             if diff < tol: break
 
         if is_root() and verbose > 0:
             print(); self.timer.write()
 
         return diff
+
+
+    @staticmethod
+    def __pack_diis_state(G_iaa, eta):
+        return np.concatenate([
+            np.asarray(G_iaa, dtype=complex).reshape(-1),
+            np.array([eta], dtype=complex)])
+
+
+    @staticmethod
+    def __unpack_diis_state(state, G_shape):
+        G_size = np.prod(G_shape)
+        G_iaa = state[:G_size].reshape(G_shape)
+        eta = float(np.real(state[G_size]))
+        return G_iaa, eta
+
+
+    def __array_to_dlr_imtime_gf(self, data):
+        from triqs.gf import Gf, MeshDLRImTime
+
+        mesh = MeshDLRImTime(
+            beta=self.beta, statistic='Fermion',
+            w_max=self.lamb / self.beta, eps=self.eps,
+            symmetrize=self.dlr_symmetrize)
+        gf = Gf(mesh=mesh, target_shape=list(data.shape[1:]))
+        gf.data[:] = data
+        return gf
+
+
+    @timer('CDIIS residual')
+    def __cdiis_commutator_residual(self, G_iaa, Sigma_iaa, eta, dmu=0.0):
+        r"""Commutator-DIIS residual following the Green's-function CDIIS form.
+
+        The paper's residual is
+
+            C_jj(iw) = [G_j(iw), G0^{-1}(iw) - Sigma_j(iw)].
+
+        For the pseudo-particle Dyson equation the shifted inverse operator is
+        ``G0^{-1}(iw) - eta * I - dmu * N - Sigma(iw)``.  The residual is
+        transformed back to DLR imaginary time before entering the DIIS Gram
+        matrix, matching the paper's time-domain residual overlap.
+        """
+        from triqs.gf import Gf, make_gf_dlr_imfreq, make_gf_dlr_imtime
+
+        G_w = make_gf_dlr_imfreq(self.__array_to_dlr_imtime_gf(G_iaa))
+        G0_w = make_gf_dlr_imfreq(self.__array_to_dlr_imtime_gf(self.G0_iaa))
+        Sigma_w = make_gf_dlr_imfreq(self.__array_to_dlr_imtime_gf(Sigma_iaa))
+
+        n_orb = G_iaa.shape[1]
+        identity = np.eye(n_orb, dtype=complex)
+        cdiis_w = Gf(mesh=G_w.mesh, target_shape=[n_orb, n_orb])
+
+        static_shift = eta * identity + dmu * self.N_op
+        for n in range(G_w.data.shape[0]):
+            try:
+                g0_inverse = np.linalg.solve(G0_w.data[n], identity)
+            except np.linalg.LinAlgError:
+                g0_inverse = np.linalg.pinv(G0_w.data[n])
+            dyson_inverse = g0_inverse - static_shift - Sigma_w.data[n]
+            cdiis_w.data[n] = G_w.data[n] @ dyson_inverse - dyson_inverse @ G_w.data[n]
+
+        return make_gf_dlr_imtime(cdiis_w).data
             
 
     @timer('Dyson equation')
