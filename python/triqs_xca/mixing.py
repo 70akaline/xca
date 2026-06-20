@@ -21,9 +21,16 @@
 
 import numpy as np
 
+from .pycppdlr import ImTimeOps as _ImTimeOps  # noqa: F401
+from . import _mixing_cpp
+
 
 class DIISMixer:
     """DIIS mixer for fixed-point iterations.
+
+    The DIIS/Pulay history and constrained residual minimization live in the
+    C++ ``triqs_xca::mixing::diis_mixer`` implementation. This Python class is
+    a compatibility wrapper for the previous Python API.
 
     Given a current vector ``x`` and a candidate vector, this stores an error
     estimate and extrapolates from recent candidates. If no explicit residual
@@ -31,8 +38,8 @@ class DIISMixer:
     The coefficients minimize the norm of the extrapolated residual subject to
     ``sum(c) = 1``.
 
-    This is the standard Pulay DIIS construction. It can also be used for
-    commutator-DIIS (CDIIS) by supplying the commutator residual explicitly.
+    The same C++ implementation is also used for commutator-DIIS (CDIIS) by
+    supplying the commutator residual explicitly.
     """
 
     def __init__(self, history_size=6, start=2, mix=1.0, trust_radius=None,
@@ -43,6 +50,8 @@ class DIISMixer:
             raise ValueError("start must be at least one")
         if not 0.0 < mix <= 1.0:
             raise ValueError("mix must be in the interval (0, 1]")
+        if trust_radius is not None and trust_radius <= 0.0:
+            raise ValueError("trust_radius must be positive")
 
         self.history_size = int(history_size)
         self.start = int(start)
@@ -50,20 +59,12 @@ class DIISMixer:
         self.trust_radius = trust_radius
         self.regularization = float(regularization)
 
-        self._vectors = []
-        self._residuals = []
-        self.last_coefficients = None
-        self.last_used_diis = False
+        self._mixer = _mixing_cpp.create_diis_mixer(
+            history_size=self.history_size, start=self.start, mix=self.mix,
+            trust_radius=self.trust_radius, regularization=self.regularization)
 
     def reset(self):
-        self._vectors.clear()
-        self._residuals.clear()
-        self.last_coefficients = None
-        self.last_used_diis = False
-
-    @staticmethod
-    def _linear_mix(current, candidate, mix):
-        return (1.0 - mix) * current + mix * candidate
+        _mixing_cpp.reset_diis_mixer(self._mixer)
 
     def update(self, current, candidate, residual=None):
         current = np.asarray(current)
@@ -71,100 +72,50 @@ class DIISMixer:
         if current.shape != candidate.shape:
             raise ValueError("current and candidate must have the same shape")
 
+        shape = candidate.shape
+        current_vec = np.asarray(current, dtype=complex).reshape(-1)
+        candidate_vec = np.asarray(candidate, dtype=complex).reshape(-1)
+
         if residual is None:
-            residual = candidate - current
+            residual_vec = None
+        else:
+            residual_vec = np.asarray(residual, dtype=complex).reshape(-1)
+            if residual_vec.size != candidate_vec.size:
+                raise ValueError("residual must have the same flattened size as candidate")
 
-        residual = np.asarray(residual, dtype=complex).reshape(-1)
-        vector = np.asarray(candidate, dtype=complex).reshape(-1)
-        if not np.all(np.isfinite(residual)):
-            self.last_coefficients = None
-            self.last_used_diis = False
-            return self._linear_mix(current, candidate, self.mix)
+        mixed = _mixing_cpp.update_diis_mixer(
+            self._mixer, current_vec, candidate_vec, residual=residual_vec)
+        return np.asarray(mixed).reshape(shape)
 
-        self._residuals.append(residual.copy())
-        self._vectors.append(vector.copy())
-        if len(self._residuals) > self.history_size:
-            self._residuals.pop(0)
-            self._vectors.pop(0)
+    @property
+    def last_coefficients(self):
+        coeffs = _mixing_cpp.diis_last_coefficients(self._mixer)
+        if coeffs is None:
+            return None
+        return np.asarray(coeffs)
 
-        if len(self._residuals) < self.start:
-            self.last_coefficients = None
-            self.last_used_diis = False
-            return self._linear_mix(current, candidate, self.mix)
-
-        diis = self._diis_candidate(candidate.shape)
-        if diis is None:
-            self.last_coefficients = None
-            self.last_used_diis = False
-            return self._linear_mix(current, candidate, self.mix)
-
-        self.last_used_diis = True
-        if self.mix < 1.0:
-            return self._linear_mix(current, diis, self.mix)
-        return diis
+    @property
+    def last_used_diis(self):
+        return bool(_mixing_cpp.diis_last_used(self._mixer))
 
     @property
     def last_used_pulay(self):
         return self.last_used_diis
 
-    def _diis_candidate(self, shape):
-        n = len(self._residuals)
-        gram = np.empty((n, n), dtype=float)
-
-        for i, ri in enumerate(self._residuals):
-            for j, rj in enumerate(self._residuals):
-                gram[i, j] = np.vdot(ri, rj).real
-
-        scale = max(float(np.max(np.abs(gram))), 1.0)
-        gram /= scale
-        gram.flat[::n + 1] += self.regularization
-
-        system = np.zeros((n + 1, n + 1), dtype=float)
-        system[:n, :n] = gram
-        system[:n, n] = 1.0
-        system[n, :n] = 1.0
-
-        rhs = np.zeros(n + 1, dtype=float)
-        rhs[n] = 1.0
-
-        try:
-            coeffs = np.linalg.solve(system, rhs)[:n]
-        except np.linalg.LinAlgError:
-            return None
-
-        mixed = np.zeros_like(self._vectors[-1])
-        for coeff, vector in zip(coeffs, self._vectors):
-            mixed += coeff * vector
-
-        if not np.all(np.isfinite(mixed)):
-            return None
-
-        if self.trust_radius is not None:
-            mixed, coeffs = self._restrict_step(mixed, coeffs)
-
-        self.last_coefficients = coeffs
-        return mixed.reshape(shape)
-
-    def _restrict_step(self, mixed, coeffs):
-        radius = float(self.trust_radius)
-        if radius <= 0.0:
-            raise ValueError("trust_radius must be positive")
-
-        step_coeffs = np.array(coeffs, copy=True)
-        step_coeffs[-1] -= 1.0
-        step_norm = np.linalg.norm(step_coeffs)
-        if step_norm <= radius:
-            return mixed, coeffs
-
-        restricted = np.array(step_coeffs, copy=True)
-        restricted *= radius / step_norm
-        restricted[-1] += 1.0
-
-        mixed = np.zeros_like(self._vectors[-1])
-        for coeff, vector in zip(restricted, self._vectors):
-            mixed += coeff * vector
-
-        return mixed, restricted
-
 
 PulayMixer = DIISMixer
+
+
+def cdiis_commutator_residual(beta, itops, G_iaa, G0_iaa, Sigma_iaa, eta,
+                              number_op, dmu=0.0, symmetrize=True):
+    """Compute the Green's-function CDIIS commutator residual in C++.
+
+    Implements the residual form used by P. Pokhilko, C.-N. Yeh, and D. Zgid,
+    J. Chem. Phys. 156, 094101 (2022), DOI: 10.1063/5.0082586.
+    """
+    return _mixing_cpp.cdiis_commutator_residual(
+        beta, itops, np.asarray(G_iaa, dtype=complex),
+        np.asarray(G0_iaa, dtype=complex),
+        np.asarray(Sigma_iaa, dtype=complex), float(eta),
+        np.asarray(number_op, dtype=complex), dmu=float(dmu),
+        symmetrize=bool(symmetrize))
