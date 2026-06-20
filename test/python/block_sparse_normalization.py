@@ -33,6 +33,7 @@ def solve_slater_condon_bethe_half_filling(
         ppsc_maxiter=10,
         mix=1.,
         normalization='classical',
+        dlr_symmetrize=False,
         ):
 
     if l == 2:
@@ -69,7 +70,9 @@ def solve_slater_condon_bethe_half_filling(
     from triqs.gf import SemiCircular
     from triqs.gf import MeshDLRImFreq, Gf, make_gf_dlr_imtime, iOmega_n, inverse
 
-    mesh_w = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=eps)
+    mesh_w = MeshDLRImFreq(
+        beta=beta, statistic='Fermion', w_max=w_max, eps=eps,
+        symmetrize=dlr_symmetrize)
     Delta_w = Gf(mesh=mesh_w, target_shape=[n_orb]*2)
 
     Delta_w << inverse(iOmega_n)
@@ -79,7 +82,8 @@ def solve_slater_condon_bethe_half_filling(
     from triqs_xca.block_sparse_solver import BlockSparseSolver
 
     S = BlockSparseSolver(
-        H, beta, w_max, eps, gf_struct, 
+        H, beta, w_max, eps, gf_struct,
+        dlr_symmetrize=dlr_symmetrize,
         #conserved_operators=[N_tot],
         )
 
@@ -112,10 +116,8 @@ if __name__ == '__main__':
     normalizations = [
         'classic', 
         'ode+classic', 
-        'odeG+classic',
         'root',
         'ode+root', 
-        'odeG+root',
         ]
 
     Ss = []

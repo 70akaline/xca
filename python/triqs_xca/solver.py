@@ -343,31 +343,64 @@ class Solver(object):
         
         def target_function(eta):
             G_iaa_new = self.solve_dyson(Sigma_iaa, eta, tol, dmu=self.dmu)
-            Z = self.fd.partition_function(G_iaa_new)
-            Omega = np.log(np.abs(Z)) / self.beta
+            if not np.all(np.isfinite(G_iaa_new)):
+                return np.nan
+
+            Z = self.partition_function(G_iaa_new)
+            val = np.real(Z) - 1.0
 
             if is_root() and verbose:
-                print(f'PPSC: Eta bisection: Z-1 = {Z-1:+2.2E}, Omega = {Omega:+2.2E}')
+                print(f'PPSC: Eta bisection: eta = {eta:+2.6E}, Z-1 = {Z-1:+2.2E}')
 
-            return Omega
-        
-        Omega = target_function(self.eta)
+            return val
 
-        if np.abs(Omega) > 0:
-            
-            E_max = self.eta.real if Omega < 0. else 0.5*self.lamb/self.beta
-            E_min = self.eta.real if Omega > 0. else 0.
-            
-            bracket = [E_min, E_max]
-            
-            sol = root_scalar(target_function, method='brenth',
-                              fprime=False, bracket=bracket, rtol=tol, options={'disp': True})
-            
-            if not sol.converged and is_root():
-                print("PPSC: Warning! Energy shift failed.")
-                print(sol)
+        eta0 = float(np.real(self.eta))
+        samples = []
 
-            return sol.root
+        def add_sample(eta):
+            val = target_function(eta)
+            if not np.isfinite(val):
+                return None
+            if abs(val) < tol:
+                return (eta, eta)
+            for eta_prev, val_prev in samples:
+                if val * val_prev < 0:
+                    return tuple(sorted((eta_prev, eta)))
+            samples.append((eta, val))
+            return None
+
+        bracket = add_sample(eta0)
+        scale = max(0.05 * self.lamb / self.beta, 0.05 * np.max(np.abs(self.H_mat)), 1e-3)
+        max_step = max(100.0 * self.lamb / self.beta, 100.0 * np.max(np.abs(self.H_mat)), 10.0)
+
+        step = scale
+        while bracket is None and step <= max_step:
+            for eta in (eta0 - step, eta0 + step):
+                bracket = add_sample(eta)
+                if bracket is not None:
+                    break
+            step *= 2.0
+
+        if bracket is None:
+            if is_root():
+                print('PPSC: Warning! Energy shift bisection could not bracket Z=1.')
+                if samples:
+                    eta_best, val_best = min(samples, key=lambda x: abs(x[1]))
+                    print(f'PPSC: Best sampled eta = {eta_best:+2.6E}, Z-1 = {val_best:+2.2E}')
+            raise RuntimeError('Could not bracket pseudo-particle normalization root')
+
+        if bracket[0] == bracket[1]:
+            return bracket[0]
+
+        sol = root_scalar(
+            target_function, method='brentq', bracket=bracket,
+            xtol=tol, rtol=max(tol, 4 * np.finfo(float).eps), options={'disp': True})
+
+        if not sol.converged and is_root():
+            print("PPSC: Warning! Energy shift bisection failed.")
+            print(sol)
+
+        return sol.root
 
 
     #@timer('Eta search (Newton)')
@@ -377,31 +410,36 @@ class Solver(object):
         
             #G_iaa_new = self.dyson.solve(Sigma_iaa, eta)
             G_iaa_new = self.solve_dyson(Sigma_iaa, eta, tol, dmu=self.dmu)
+            if not np.all(np.isfinite(G_iaa_new)):
+                return np.nan, np.nan
             
-            Z = self.fd.partition_function(G_iaa_new)
-            Omega = np.log(np.abs(Z)) / self.beta
+            Z = self.partition_function(G_iaa_new)
+            val = np.real(Z) - 1.0
 
             if verbose and is_root():
-                print(f'PPSC: Eta Newton: Z-1 = {Z-1:+2.2E}, Omega = {Omega:+2.2E}')
+                print(f'PPSC: Eta Newton: eta = {eta:+2.6E}, Z-1 = {Z-1:+2.2E}')
 
             G_xaa = self.ito.vals2coefs(G_iaa_new)
             GG_iaa = self.ito.convolve(self.beta, G_xaa, G_xaa, True)
-            TrGGb = self.fd.partition_function(GG_iaa)
-            dOmega = TrGGb / self.beta / Z
+            dval = np.real(self.partition_function(GG_iaa))
 
-            return Omega, dOmega
+            return val, dval
 
         sol = root_scalar(
-            target_function, x0=self.eta, method='newton', fprime=True, rtol=tol)
+            target_function, x0=self.eta, method='newton', fprime=True,
+            xtol=tol, rtol=max(tol, 4 * np.finfo(float).eps))
 
         if not sol.converged and is_root():
             print('PPSC: Warning! Energy shift Newton search failed.')
             print(sol)
 
-        if not sol.converged:
-            return self.energyshift_bisection(Sigma_iaa, verbose=verbose)
+        if sol.converged:
+            val, _ = target_function(sol.root)
+            if np.isfinite(val) and abs(val) < max(10 * tol, 1e-12):
+                return sol.root
+
+        return self.energyshift_bisection(Sigma_iaa, tol=tol, verbose=verbose)
         
-        return sol.root
 
 
     @timer('Eta and mu search (Newton)')
@@ -601,6 +639,9 @@ class Solver(object):
             raise ValueError("mixing must be 'linear', 'diis', or 'cdiis'")
 
         accepted_sigma_iaa = None
+        best_diff = np.inf
+        best_state = None
+        restore_best_state = False
         
         for iter in range(1, maxiter+1):
 
@@ -608,6 +649,11 @@ class Solver(object):
             
             #Sigma_iaa = Sigma_calc_loop(self.fd, self.G_iaa, max_order, verbose=verbose)
             Sigma_iaa = self.calc_Sigma(max_order, verbose=verbose > 1)
+            if not np.all(np.isfinite(Sigma_iaa)):
+                if is_root() and verbose > 0:
+                    print('PPSC: Warning! Non-finite self-energy encountered; restoring best finite iterate.')
+                restore_best_state = True
+                break
 
             if is_root() and verbose:
                 dyson_start_time = time.time()
@@ -629,10 +675,21 @@ class Solver(object):
             else:
                 G_iaa_new = self.solve_dyson(Sigma_iaa, self.eta, tol, dmu=self.dmu)
                 Z = self.partition_function(G_iaa_new)
+                if not np.isfinite(Z):
+                    if is_root() and verbose > 0:
+                        print('PPSC: Warning! Non-finite partition function encountered; restoring best finite iterate.')
+                    restore_best_state = True
+                    break
                 deta = np.log(np.abs(Z)) / self.beta
                 G_iaa_new[:] *= np.exp(-self.tau_i * deta)[:, None, None]
                 if is_root() and verbose > 1: print(f'deta = {deta}, eta = {self.eta}')
                 self.eta += deta
+
+            if not (np.isfinite(self.eta) and np.all(np.isfinite(G_iaa_new))):
+                if is_root() and verbose > 0:
+                    print('PPSC: Warning! Non-finite Dyson solution encountered; restoring best finite iterate.')
+                restore_best_state = True
+                break
 
             if is_root() and verbose > 1:
                 dyson_end_time = time.time()
@@ -642,6 +699,15 @@ class Solver(object):
             Z = self.partition_function(G_iaa_new)
 
             diff = np.max(np.abs(self.G_iaa - G_iaa_new))
+            if not np.isfinite(diff):
+                if is_root() and verbose > 0:
+                    print('PPSC: Warning! Non-finite convergence measure encountered; restoring best finite iterate.')
+                restore_best_state = True
+                break
+
+            if diff < best_diff and np.all(np.isfinite(G_iaa_new)) and np.isfinite(self.eta):
+                best_diff = diff
+                best_state = (G_iaa_new.copy(), Sigma_iaa.copy(), self.eta, self.dmu)
 
             if mixer is None or mixing == 'cdiis':
                 self.G_iaa = mix*G_iaa_new + (1-mix)*self.G_iaa
@@ -659,9 +725,19 @@ class Solver(object):
                 print(f'{marker}{iter:4d} | {diff:2.2E} | {Z-1:+2.2E}')
             if diff < tol: break
 
+        if (not restore_best_state) and best_state is not None and best_diff < diff:
+            restore_best_state = diff > max(1.0, 1e6 * best_diff)
+
+        if restore_best_state and best_state is not None and best_diff < diff:
+            self.G_iaa, self.Sigma_iaa, self.eta, self.dmu = best_state
+            diff = best_diff
+            if is_root() and verbose > 0:
+                print(f'PPSC: Restored best finite iterate with diff = {diff:2.2E}')
+
         if is_root() and verbose > 0:
             print(); self.timer.write()
 
+        self.last_diff = diff
         return diff
 
 

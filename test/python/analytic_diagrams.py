@@ -134,7 +134,9 @@ def test_n_fermions(n, verbose):
     
 def analytic_diagram_cf(h_int, gf_struct, verbose):
 
-    S = TriqsSolver(beta=2.0, gf_struct=gf_struct, eps=1e-12, w_max=10.0)
+    S = TriqsSolver(
+        beta=2.0, gf_struct=gf_struct, eps=1e-12, w_max=10.0,
+        dlr_symmetrize=False)
 
     for bidx, delta_tau in S.Delta_tau:
         delta_w = make_gf_dlr_imfreq(delta_tau)
@@ -343,4 +345,3 @@ if __name__ == '__main__':
 
     for n in range(1, 4):
         test_n_fermions(n=n, verbose=False)
-

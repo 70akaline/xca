@@ -82,7 +82,8 @@ def solve_one_spinful_fermion(
     N_tot = N_op(spin_names, norb, off_diag=False)
     H_loc = H_int - mu * N_tot + eps1 * N_tot
     
-    S = TriqsSolver(beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max)
+    S = TriqsSolver(beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max,
+                    dlr_symmetrize=False)
 
     for bidx, delta_tau in S.Delta_tau:
         delta_w = make_gf_dlr_imfreq(delta_tau)

@@ -15,6 +15,7 @@ def test_block_sparse_self_cons(verbose=False):
     eps = 1e-12
     w_max = 10.0
     ppsc_tol = 1e-8
+    dlr_symmetrize = False
 
     order = 1
     maxiter = 100
@@ -30,7 +31,9 @@ def test_block_sparse_self_cons(verbose=False):
     
     H = -mu * N_op
 
-    mesh_w = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=eps)
+    mesh_w = MeshDLRImFreq(
+        beta=beta, statistic='Fermion', w_max=w_max, eps=eps,
+        symmetrize=dlr_symmetrize)
     Delta_w = Gf(mesh=mesh_w, target_shape=[1, 1])
 
     Delta_w << 0.5 * inverse(iOmega_n - e1)
@@ -38,7 +41,9 @@ def test_block_sparse_self_cons(verbose=False):
 
     tau_mesh = Delta_tau.mesh
 
-    S = TriqsSolver(beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max)
+    S = TriqsSolver(
+        beta=beta, gf_struct=gf_struct, eps=eps, w_max=w_max,
+        dlr_symmetrize=dlr_symmetrize)
     
     S.Delta_tau['0'] << Delta_tau # Initial guess
 
@@ -72,6 +77,7 @@ def test_block_sparse_self_cons(verbose=False):
 
     BSS = BlockSparseSolver(
         H, beta, w_max, eps, gf_struct, 
+        dlr_symmetrize=dlr_symmetrize,
         #conserved_operators=[],
         )
     

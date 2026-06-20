@@ -1,3 +1,5 @@
+#pragma once
+
 #include <nda/nda.hpp>
 
 #include <cppdlr/dlr_imtime.hpp>
@@ -75,7 +77,8 @@ BlockDiagOpFun ad_to_atom_prop(const triqs_atom_diag &ad, double beta, imtime_op
  * @param[in] eps DLR epsilon parameter
  * @return triqs::block_gf<dlr_imtime> representing the atomic propagator
  */
-triqs::gfs::block_gf<triqs::mesh::dlr_imtime> ad_to_atom_prop(const triqs_atom_diag &ad, double beta, double Lambda, double eps);
+triqs::gfs::block_gf<triqs::mesh::dlr_imtime> ad_to_atom_prop(const triqs_atom_diag &ad, double beta, double Lambda, double eps,
+                                                              bool dlr_symmetrize = true);
 
 /**
  * @brief Get creation and annihilation operators from an AtomDiag object

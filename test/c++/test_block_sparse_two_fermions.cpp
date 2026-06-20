@@ -36,12 +36,13 @@ TEST(two_fermions, const_hyb_se) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-12;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
   // Two-fermion setup with one pole at zero gives the constant-hybridization test case
-  auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps, 0.0, 0.0, 0.0);
+  auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps, 0.0, 0.0, 0.0, dlr_symmetrize);
   auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
   auto &hyb_poles        = two_fermion_model.hyb_poles;
   auto &ad               = two_fermion_model.ad;
@@ -102,11 +103,12 @@ TEST(two_fermions, const_hyb_spgf) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-12;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
-  auto itops    = imtime_ops(Lambda, dlr_rf, true);
+  bool dlr_symmetrize = false;
+  auto dlr_rf         = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops          = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
   int r         = itops.rank();
 
-  auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps, 0.0, 0.0, 0.0);
+  auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps, 0.0, 0.0, 0.0, dlr_symmetrize);
   auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
   auto &hyb_poles        = two_fermion_model.hyb_poles;
   auto &ad               = two_fermion_model.ad;
@@ -161,8 +163,9 @@ TEST(two_fermions, one_hyb_pole) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-12;
+  bool dlr_symmetrize = false;
 
-  auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps);
+  auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps, 3.0, 0.0, -1.5, dlr_symmetrize);
   auto &hyb_coeffs       = two_fermion_model.hyb_coeffs;
   auto &hyb_poles        = two_fermion_model.hyb_poles;
   auto &ad               = two_fermion_model.ad;
@@ -176,9 +179,9 @@ TEST(two_fermions, one_hyb_pole) {
   auto spgf                   = D.compute_single_ptcle_gf(G_ppsc, topology);
 
   // compare to call to dense code
-  auto hyb          = triqs_xca::hyb::coefs2vals(beta, Lambda, eps, hyb_coeffs, hyb_poles);
-  auto dlr_rf       = build_dlr_rf(Lambda, eps, true);
-  auto itops        = imtime_ops(Lambda, dlr_rf, true);
+  auto dlr_rf       = build_dlr_rf(Lambda, eps, dlr_symmetrize);
+  auto itops        = imtime_ops(Lambda, dlr_rf, dlr_symmetrize);
+  auto hyb          = triqs_xca::hyb::coefs2vals(beta, itops, hyb_coeffs, hyb_poles);
   auto hyb_refl     = itops.reflect(hyb);
   auto G_ppsc_dense = nda::zeros<dcomplex>(itops.rank(), ad.get_full_hilbert_space_dim(), ad.get_full_hilbert_space_dim());
   int s0            = 0;
@@ -190,7 +193,7 @@ TEST(two_fermions, one_hyb_pole) {
   }
   auto Fset = get_operators_dense(ad, hyb_coeffs);
   hyb_poles = nda::make_regular(beta * hyb_poles);
-  DenseDiagramEvaluator D_dense(beta, eps, itops, hyb_poles, hyb_coeffs, Fset);
+  DenseDiagramEvaluator D_dense(beta, eps, itops, hyb_poles, hyb_coeffs, Fset, dlr_symmetrize);
   auto mu_ops  = Fset.Fs;
   auto kap_ops = Fset.F_dags;
   CorrelatorBackbone B(topology, norb);
