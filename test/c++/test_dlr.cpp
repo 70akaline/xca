@@ -50,8 +50,8 @@ TEST(strong_coupling, exponential_functions) {
   // Set DLR parameters
   double lambda      = beta * 5;
   double eps         = 1.0e-12;
-  auto dlr_rf        = build_dlr_rf(lambda, eps);  // Get DLR frequencies
-  auto itops         = imtime_ops(lambda, dlr_rf); // Get DLR imaginary time object
+  auto dlr_rf        = build_dlr_rf(lambda, eps, true);  // Get DLR frequencies
+  auto itops         = imtime_ops(lambda, dlr_rf, true); // Get DLR imaginary time object
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 
@@ -140,8 +140,8 @@ TEST(strong_coupling, exponential_functions) {
 //     // Set DLR parameters
 //     double lambda = beta*5;
 //     double eps = 1.0e-12;
-//     auto dlr_rf = build_dlr_rf(lambda, eps); // Get DLR frequencies
-//     auto itops = imtime_ops(lambda, dlr_rf); // Get DLR imaginary time object
+//     auto dlr_rf = build_dlr_rf(lambda, eps, true); // Get DLR frequencies
+//     auto itops = imtime_ops(lambda, dlr_rf, true); // Get DLR imaginary time object
 //     auto const & dlr_it = itops.get_itnodes();
 //     int r = itops.rank();
 
@@ -290,8 +290,8 @@ TEST(strong_coupling, G_diagrams) {
   // Set DLR parameters
   double lambda      = beta * 10;
   double eps         = 1.0e-12;
-  auto dlr_rf        = build_dlr_rf(lambda, eps);  // Get DLR frequencies
-  auto itops         = imtime_ops(lambda, dlr_rf); // Get DLR imaginary time object
+  auto dlr_rf        = build_dlr_rf(lambda, eps, true);  // Get DLR frequencies
+  auto itops         = imtime_ops(lambda, dlr_rf, true); // Get DLR imaginary time object
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 

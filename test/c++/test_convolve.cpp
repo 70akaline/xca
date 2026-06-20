@@ -33,9 +33,9 @@ TEST(test_dlr, test_dlr_convolve) {
   double lambda = 1;
   double beta   = 1;
   double eps    = 1e-14;
-  auto dlr_rf   = build_dlr_rf(lambda, eps);
+  auto dlr_rf   = build_dlr_rf(lambda, eps, true);
   // Get DLR imaginary time object
-  auto itops         = imtime_ops(lambda, dlr_rf);
+  auto itops         = imtime_ops(lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 

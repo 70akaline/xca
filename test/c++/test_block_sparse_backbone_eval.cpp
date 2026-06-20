@@ -46,7 +46,7 @@ TEST(Backbone, indexing) {
   double beta   = 2.0;
   double Lambda = 100.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
   int r         = dlr_rf.size(); // r = 36
 
   // Indices for a particular backbone diagram
@@ -144,8 +144,8 @@ TEST(Backbone, one_fermion_three_orders_const_hyb) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
-  auto itops    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
+  auto itops    = imtime_ops(Lambda, dlr_rf, true);
   int r         = itops.rank();
 
   auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps);
@@ -209,8 +209,8 @@ TEST(Backbone, one_fermion_three_orders_hyb_one_pole) {
   double eps    = 1.0e-10;
 
   // Generate DLR imaginary-time object
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
   int r       = itops.rank();
 
   auto one_fermion_model = one_fermion_model_helper(beta, Lambda, eps, 0.8);
@@ -274,8 +274,8 @@ TEST(Backbone, OCA_BDOF_construct) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   // generate creation/annihilation operators
   auto [Deltat, Deltat_refl]              = discrete_bath_helper(beta, Lambda, eps);
@@ -346,8 +346,8 @@ TEST(Backbone, spin_flip_fermion) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   int norb             = 2;
   int nn               = 2 * norb; // 2 * number of orbitals
@@ -422,8 +422,8 @@ TEST(Backbone, spin_flip_fermion_sym_sets) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   int norb             = 2;
   int nn               = 2 * norb; // 2 * number of orbitals
@@ -494,8 +494,8 @@ TEST(Backbone, OCA_semicircle_bath_aaa) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
 
@@ -563,8 +563,8 @@ TEST(Backbone, spin_flip_fermion_aaa) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   int norb = 2;
   int nn   = 2 * norb;
@@ -654,8 +654,8 @@ TEST(Backbone, spin_flip_fermion_all_sym_aaa) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   int norb = 2;
   int nn   = 2 * norb;
@@ -742,8 +742,8 @@ TEST(Backbone, OCA_gf_construct) {
   double eps    = 1.0e-4;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   // hybridization
   auto [Deltat, Deltat_reflect]           = discrete_bath_helper(beta, Lambda, eps);
@@ -813,8 +813,8 @@ TEST(Backbone, manual_loop) {
   double eps    = 1.0e-4;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   // hybridization
   auto [Deltat, Deltat_reflect]           = discrete_bath_helper(beta, Lambda, eps);

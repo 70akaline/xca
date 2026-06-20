@@ -61,8 +61,8 @@ nda::array<dcomplex, 3> make_hyb_coeffs() {
   int norb      = 2;
   nda::array<double, 1> e{-3.3 * t, 2.3 * t};
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();

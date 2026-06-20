@@ -29,8 +29,8 @@ TEST(BlockSparseOCAManual, single_exponential) {
   double beta        = 1.0;
   double Lambda      = 100.0;
   double eps         = 1.0e-13;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 
@@ -85,8 +85,8 @@ TEST(BlockSparseOCAManual, two_band_discrete_bath_bs) {
   double eps    = 1.0e-4;
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -136,8 +136,8 @@ TEST(BlockSparseOCAManual, two_band_discrete_bath_bs_vs_dense) {
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-6;
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -166,8 +166,8 @@ TEST(BlockSparseOCAManual, two_band_semicircle_bath_aaa) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   // call two band helper just for Gt_dense, Fs_dense, F_dags_dense
   // model setup
@@ -240,8 +240,8 @@ TEST(BlockSparseOCAManual, H5_two_band_discrete_bath_tpz) {
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-6;
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 

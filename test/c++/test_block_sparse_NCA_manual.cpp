@@ -128,8 +128,8 @@ TEST(BlockSparseNCAManual, single_exponential) {
   double beta        = 1.0;
   double Lambda      = 100.0;
   double eps         = 1.0e-13;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 
@@ -176,8 +176,8 @@ TEST(BlockSparseNCAManual, two_band_discrete_bath_bs_dense) {
   double Lambda = 100 * beta;
   double eps    = 1.0e-10;
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -223,8 +223,8 @@ TEST(BlockSparseNCAManual, two_band_semicircle_bath_dense_aaa) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   // model setup
   auto [Deltat, Deltat_refl]              = discrete_bath_helper(beta, Lambda, eps);

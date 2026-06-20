@@ -36,8 +36,8 @@ TEST(two_fermions, const_hyb_se) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-12;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
-  auto itops    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
+  auto itops    = imtime_ops(Lambda, dlr_rf, true);
   int r         = itops.rank();
 
   // Two-fermion setup with one pole at zero gives the constant-hybridization test case
@@ -102,8 +102,8 @@ TEST(two_fermions, const_hyb_spgf) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-12;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
-  auto itops    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
+  auto itops    = imtime_ops(Lambda, dlr_rf, true);
   int r         = itops.rank();
 
   auto two_fermion_model = two_fermion_model_helper(beta, Lambda, eps, 0.0, 0.0, 0.0);
@@ -177,8 +177,8 @@ TEST(two_fermions, one_hyb_pole) {
 
   // compare to call to dense code
   auto hyb          = triqs_xca::hyb::coefs2vals(beta, Lambda, eps, hyb_coeffs, hyb_poles);
-  auto dlr_rf       = build_dlr_rf(Lambda, eps);
-  auto itops        = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf       = build_dlr_rf(Lambda, eps, true);
+  auto itops        = imtime_ops(Lambda, dlr_rf, true);
   auto hyb_refl     = itops.reflect(hyb);
   auto G_ppsc_dense = nda::zeros<dcomplex>(itops.rank(), ad.get_full_hilbert_space_dim(), ad.get_full_hilbert_space_dim());
   int s0            = 0;

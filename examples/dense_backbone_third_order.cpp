@@ -41,8 +41,8 @@ nda::array<dcomplex, 3> Hmat_to_Gtmat(nda::array<dcomplex, 2> Hmat, double beta,
 std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helper(double beta, double Lambda, double eps) {
   // Helper function for setting up the discrete bath model
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = rel2abs(dlr_it);
   int r              = itops.rank();
@@ -85,8 +85,8 @@ std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helpe
 
 std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps) {
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -201,8 +201,8 @@ int main() {
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();

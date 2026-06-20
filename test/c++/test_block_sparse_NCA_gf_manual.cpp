@@ -20,8 +20,8 @@ TEST(DenseNCAGF, single_exponential) {
   double beta        = 1.0;
   double Lambda      = 10.0;
   double eps         = 1e-8;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 
@@ -67,8 +67,8 @@ TEST(DenseNCAGF, matrices) {
   double beta        = 2.0;
   double Lambda      = 10 * beta;
   double eps         = 1.0e-6;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   auto Gt            = Hmat_to_Gtmat(H, beta, dlr_it_abs);
@@ -111,8 +111,8 @@ TEST(BSNCAGF, single_exponential) {
   double beta        = 1.0;
   double Lambda      = 10.0;
   double eps         = 1e-8;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   int r              = itops.rank();
 
@@ -167,8 +167,8 @@ TEST(BSNCAGF, matrices) {
   double beta        = 2.0;
   double Lambda      = 10 * beta;
   double eps         = 1.0e-6;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   auto Gt_arr        = Hmat_to_Gtmat(H, beta, dlr_it_abs);

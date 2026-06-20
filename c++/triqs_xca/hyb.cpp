@@ -93,8 +93,8 @@ namespace triqs_xca::hyb {
 
   nda::array<dcomplex, 3> coefs2vals(double beta, double Lambda, double eps, nda::array_const_view<dcomplex, 3> coefs,
                                      nda::vector_const_view<double> poles) {
-    auto dlr_rf = cppdlr::build_dlr_rf(Lambda, eps);
-    auto itops  = cppdlr::imtime_ops(Lambda, dlr_rf);
+    auto dlr_rf = cppdlr::build_dlr_rf(Lambda, eps, true);
+    auto itops  = cppdlr::imtime_ops(Lambda, dlr_rf, true);
     return coefs2vals(beta, itops, coefs, poles);
   }
 

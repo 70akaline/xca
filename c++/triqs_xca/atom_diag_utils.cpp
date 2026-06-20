@@ -331,13 +331,13 @@ namespace triqs_xca::atom_diag {
     auto [H_blocks, H_block_inds] = get_hamiltonian_blocks(ad);
 
     // Compute atomic propagator blocks
-    auto dlr_rf                                    = cppdlr::build_dlr_rf(Lambda, eps);
-    auto itops                                     = imtime_ops(Lambda, dlr_rf);
+    auto dlr_rf                                    = cppdlr::build_dlr_rf(Lambda, eps, true);
+    auto itops                                     = imtime_ops(Lambda, dlr_rf, true);
     std::vector<nda::array<dcomplex, 3>> ap_blocks = H_to_atom_prop_blocks<dcomplex>(H_blocks, H_block_inds, beta, itops);
 
     // Create vector of gf<dlr_imtime>
     std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_blocks(H_block_inds.size());
-    triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps);
+    triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps, true);
     for (int i = 0; i < H_block_inds.size(); ++i) { gf_blocks[i] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, ap_blocks[i]); }
     return {gf_blocks};
   }

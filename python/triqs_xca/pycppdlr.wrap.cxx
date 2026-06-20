@@ -21,32 +21,28 @@ using c2py::operator""_a;
 
 // ==================== enums =====================
 
-template <>
-std::map<cppdlr::statistic_t, str_t> c2py::enum_to_string<cppdlr::statistic_t> = {{cppdlr::statistic_t::Boson, "Boson"},
-                                                                                  {cppdlr::statistic_t::Fermion, "Fermion"}};
-
 // ==================== module classes =====================
 
 // --------- class _c2py_cls_0 -----------
 using _c2py_cls_0                                            = cppdlr::imtime_ops;
 template <> constexpr bool c2py::is_wrapped<_c2py_cls_0>     = true;
 template <> inline constexpr auto c2py::tp_name<_c2py_cls_0> = "triqs_xca.pycppdlr.ImTimeOps";
-static auto _c2py_init_0                                     = c2py::dispatcher_c_kw_t{
+static const auto _c2py_init_0                               = c2py::dispatcher_c_kw_t{
    c2py::c_constructor<
-                                          _c2py_cls_0, double,
-                                          nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>, bool>(
+                                    _c2py_cls_0, double,
+                                    nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>, bool>(
       "lambda", "dlr_rf", "symmetrize"),
    c2py::c_constructor<
-                                          _c2py_cls_0, double,
-                                          nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>>(
+                                    _c2py_cls_0, double,
+                                    nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>>(
       "lambda", "dlr_rf"),
    c2py::c_constructor<
-                                          _c2py_cls_0, double,
-                                          nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
-                                          nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
-                                          nda::basic_array_view<const double, 2, nda::C_stride_layout, 'M', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
-                                          nda::basic_array_view<const double, 2, nda::C_stride_layout, 'M', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
-                                          nda::basic_array_view<const int, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>>(
+                                    _c2py_cls_0, double,
+                                    nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
+                                    nda::basic_array_view<const double, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
+                                    nda::basic_array_view<const double, 2, nda::C_stride_layout, 'M', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
+                                    nda::basic_array_view<const double, 2, nda::C_stride_layout, 'M', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>,
+                                    nda::basic_array_view<const int, 1, nda::C_stride_layout, 'V', nda::default_accessor, nda::borrowed<nda::mem::AddressSpace::Host>>>(
       "lambda", "dlr_rf", "dlr_it", "cf2it", "it2cf_lu", "it2cf_piv"),
    c2py::c_constructor<_c2py_cls_0>()};
 template <> constexpr initproc c2py::tp_init<_c2py_cls_0>    = c2py::pyfkw_constructor<_c2py_init_0>;
@@ -213,9 +209,8 @@ template <> const std::string c2py::tp_doc<_c2py_cls_0> = R"DOC()DOC" + c2py::tp
 
 // build_dlr_rf
 static auto const _c2py_fun_19 =
-   c2py::dispatcher_f_kw_t{c2py::cfun([](double lambda, double eps, bool symmetrize) { return cppdlr::build_dlr_rf(lambda, eps, symmetrize); },
-                                      "lambda", "eps", "symmetrize"),
-                           c2py::cfun([](double lambda, double eps) { return cppdlr::build_dlr_rf(lambda, eps); }, "lambda", "eps")};
+   c2py::dispatcher_f_kw_t{c2py::cfun([](double lambda, double eps, bool symmetrize) { return c2py_module::build_dlr_rf(lambda, eps, symmetrize); },
+                                      "lambda", "eps", "symmetrize"_a = true)};
 
 static const auto _c2py_doc_19 = _c2py_fun_19.doc(R"DOC()DOC");
 //--------------------- module function table  -----------------------------

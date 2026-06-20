@@ -26,8 +26,8 @@ TEST(DenseGFBackbone, NCA) {
   auto [Deltat, Deltat_refl]              = discrete_bath_helper(beta, Lambda, eps);
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   auto Gt_refl_dense = itops.reflect(Gt_dense);
@@ -71,8 +71,8 @@ TEST(DenseGFBackbone, OCA) {
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -111,8 +111,8 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   double eps    = 1.0e-6;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
   auto dlr_it = itops.get_itnodes();
 
   // load Green's functions, field operators

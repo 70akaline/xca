@@ -19,6 +19,10 @@ template nda::array<nda::dcomplex, 3> cppdlr::imtime_ops::convolve<nda::array<nd
 
 namespace c2py_module {
   using ImTimeOps = cppdlr::imtime_ops;
+
+  inline nda::vector<double> build_dlr_rf(double lambda, double eps, bool symmetrize = true) {
+    return cppdlr::build_dlr_rf(lambda, eps, symmetrize);
+  }
 }
 
 #include "pycppdlr.wrap.cxx"

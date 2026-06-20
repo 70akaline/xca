@@ -57,8 +57,8 @@ def test_off_diagonal_NCA_Sigma(verbose=False):
     lamb = 1000.
     eps = 1e-12
 
-    dlr_rf = build_dlr_rf(lamb, eps)
-    ito = ImTimeOps(lamb, dlr_rf)
+    dlr_rf = build_dlr_rf(lamb, eps, True)
+    ito = ImTimeOps(lamb, dlr_rf, symmetrize=True)
 
     e0 = +1.0
     e1 = -1.0

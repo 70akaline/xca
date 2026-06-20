@@ -61,9 +61,9 @@ def test_pycppdlr(verbose=True):
     lamb = 200.0
     eps = 1e-8
 
-    dlr_rf = d.build_dlr_rf(lamb, eps)
+    dlr_rf = d.build_dlr_rf(lamb, eps, True)
 
-    itops = d.ImTimeOps(lamb, dlr_rf)
+    itops = d.ImTimeOps(lamb, dlr_rf, symmetrize=True)
     if verbose: print(dir(itops))
 
     assert( len(dlr_rf) == itops.rank() )

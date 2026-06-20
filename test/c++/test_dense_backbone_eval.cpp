@@ -32,8 +32,8 @@ TEST(DenseBackbone, OCA) {
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -91,8 +91,8 @@ TEST(DenseBackbone, third_order_manual) {
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
 
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -138,8 +138,8 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   double eps    = 1.0e-10;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
 
@@ -215,8 +215,8 @@ TEST(DenseBackbone, one_fermion_three_orders_const_hyb) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
-  auto itops    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
+  auto itops    = imtime_ops(Lambda, dlr_rf, true);
   int r         = itops.rank();
 
   auto one_fermion_model = one_fermion_model_dense_helper(beta, Lambda, eps);
@@ -287,8 +287,8 @@ TEST(DenseBackbone, one_fermion_three_orders_hyb_one_pole) {
   double eps    = 1.0e-10;
 
   // Generate DLR imaginary-time object
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
   int r       = itops.rank();
 
   auto one_fermion_model = one_fermion_model_dense_helper(beta, Lambda, eps, 0.8);
@@ -354,8 +354,8 @@ TEST(DenseBackbone, two_fermions_const_hyb_se) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
-  auto itops    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
+  auto itops    = imtime_ops(Lambda, dlr_rf, true);
   int r         = itops.rank();
 
   // Two-fermion model with constant hybridization
@@ -409,8 +409,8 @@ TEST(DenseBackbone, two_fermions_one_hyb_pole_se) {
   double beta   = 2.0;
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-10;
-  auto dlr_rf   = build_dlr_rf(Lambda, eps);
-  auto itops    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf   = build_dlr_rf(Lambda, eps, true);
+  auto itops    = imtime_ops(Lambda, dlr_rf, true);
   int r         = itops.rank();
 
   double om              = 0.8;

@@ -689,11 +689,11 @@ namespace triqs_xca::block_sparse {
   }
 
   triqs::gfs::block_gf<triqs::mesh::dlr_imtime> BDOF_to_block_gf(BlockDiagOpFun const &BDOF, double beta, double Lambda, double eps) {
-    auto dlr_rf = cppdlr::build_dlr_rf(Lambda, eps);
-    auto itops  = cppdlr::imtime_ops(Lambda, dlr_rf);
+    auto dlr_rf = cppdlr::build_dlr_rf(Lambda, eps, true);
+    auto itops  = cppdlr::imtime_ops(Lambda, dlr_rf, true);
 
     // triqs gf mesh
-    auto t_mesh = triqs::mesh::dlr_imtime(beta, triqs::mesh::Fermion, Lambda, eps);
+    auto t_mesh = triqs::mesh::dlr_imtime(beta, triqs::mesh::Fermion, Lambda / beta, eps, true);
     // create vector of gf
     std::vector<triqs::gfs::gf<triqs::mesh::dlr_imtime>> gf_vec(BDOF.get_num_block_cols());
 

@@ -50,8 +50,8 @@ TEST(strong_coupling, dimer) {
   double eps    = 1.0e-12;
 
   //preparing itops
-  auto dlr_rf = build_dlr_rf(lambda, eps);  // Get DLR frequencies
-  auto itops  = imtime_ops(lambda, dlr_rf); // Get DLR imaginary time object
+  auto dlr_rf = build_dlr_rf(lambda, eps, true);  // Get DLR frequencies
+  auto itops  = imtime_ops(lambda, dlr_rf, true); // Get DLR imaginary time object
   int r       = itops.rank();
 
   std::cout << "rank is " << r << std::endl;

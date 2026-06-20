@@ -74,8 +74,8 @@ def calc_spinless_dimer(
 
     print(f'Order: {order}')
 
-    dlr_rf = build_dlr_rf(lamb, eps)
-    ito = ImTimeOps(lamb, dlr_rf)
+    dlr_rf = build_dlr_rf(lamb, eps, True)
+    ito = ImTimeOps(lamb, dlr_rf, symmetrize=True)
 
     H = -mu * c_dag(0,0) * c(0,0)
     fundamental_operators = [ c(0,i) for i in range(1) ]

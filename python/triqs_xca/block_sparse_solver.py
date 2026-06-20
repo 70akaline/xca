@@ -75,7 +75,7 @@ class BlockSparseSolver(object):
     """
 
     def __init__(self, H_loc, beta, w_max, eps, gf_struct,
-                 conserved_operators='automatic', dlr_symmetrize=False,
+                 conserved_operators='automatic', dlr_symmetrize=True,
                  timer=None, atom_diag=None, verbose=True):
 
         self.dlr_symmetrize = dlr_symmetrize

@@ -100,8 +100,8 @@ DenseFermionModelData one_fermion_model_dense_helper(double beta, double Lambda,
 
   auto ad                       = triqs::atom_diag::atom_diag<true>(H, fop_set);
   auto H_dense                  = triqs_xca::atom_diag::get_full_h_atomic(ad);
-  auto dlr_rf                   = build_dlr_rf(Lambda, eps);
-  auto itops                    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf                   = build_dlr_rf(Lambda, eps, true);
+  auto itops                    = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it            = itops.get_itnodes();
   auto dlr_it_abs               = rel2abs(dlr_it);
   auto Gt_dense                 = Hmat_to_Gtmat(H_dense, beta, dlr_it_abs);
@@ -144,8 +144,8 @@ DenseFermionModelData two_fermion_model_dense_helper(double beta, double Lambda,
   hyb_poles = hyb_pole;
 
   auto H_dense                  = triqs_xca::atom_diag::get_full_h_atomic(ad);
-  auto dlr_rf                   = build_dlr_rf(Lambda, eps);
-  auto itops                    = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf                   = build_dlr_rf(Lambda, eps, true);
+  auto itops                    = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it            = itops.get_itnodes();
   auto dlr_it_abs               = rel2abs(dlr_it);
   auto Gt_dense                 = Hmat_to_Gtmat(H_dense, beta, dlr_it_abs);
@@ -184,8 +184,8 @@ nda::array<dcomplex, 3> Hmat_to_Gtmat(nda::array<dcomplex, 2> Hmat, double beta,
 std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helper(double beta, double Lambda, double eps) {
   // Helper function for setting up the discrete bath model
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = rel2abs(dlr_it);
   int r              = itops.rank();
@@ -229,8 +229,8 @@ std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_helpe
 std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> discrete_bath_spin_flip_helper(double beta, double Lambda, double eps, int n) {
   // Helper function for setting up the discrete bath model
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -317,8 +317,8 @@ triqs::atom_diag::atom_diag<true> two_band_atom_diag_helper() {
 
 std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps) {
 
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -332,8 +332,8 @@ std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex
 
 std::tuple<BlockDiagOpFun, BlockOpSymQuartet, nda::vector<int>> two_band_helper(double beta, double Lambda, double eps,
                                                                                 nda::array_const_view<dcomplex, 3> hyb_coeffs) {
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 

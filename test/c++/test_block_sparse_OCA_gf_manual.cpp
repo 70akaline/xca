@@ -25,8 +25,8 @@ TEST(DenseOCAGF, single_exponential) {
   double beta        = 1.0;
   double Lambda      = 100.0;
   double eps         = 1e-8;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -73,8 +73,8 @@ TEST(DenseOCAGF, degen_matrices) {
   double beta        = 1.0;
   double Lambda      = 100.0;
   double eps         = 1e-4;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -144,8 +144,8 @@ TEST(DenseOCAGF, identity_hyb) {
   double beta        = 2.0;
   double Lambda      = 10 * beta;
   double eps         = 1.0e-6;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   auto Gt            = Hmat_to_Gtmat(H, beta, dlr_it_abs);
@@ -189,8 +189,8 @@ TEST(DenseOCAGF, two_band_discrete_bath_dense) {
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-4;
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 
@@ -235,8 +235,8 @@ TEST(DenseOCAGF, two_band_semic_bath_dense) {
   double eps    = 1.0e-4;
 
   // DLR generation
-  auto dlr_rf = build_dlr_rf(Lambda, eps);
-  auto itops  = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf = build_dlr_rf(Lambda, eps, true);
+  auto itops  = imtime_ops(Lambda, dlr_rf, true);
 
   // call two band helper just for Gt_dense, Fs_dense, F_dags_dense
   auto [Gt_dense, Fs_dense, F_dags_dense] = two_band_dense_helper(beta, Lambda, eps);
@@ -284,8 +284,8 @@ TEST(BSOCAGF, single_exponential) {
   double beta        = 1.0;
   double Lambda      = 100.0;
   double eps         = 1e-8;
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
   int r              = itops.rank();
@@ -337,8 +337,8 @@ TEST(BSOCAGF, two_band_discrete_bath_bs) {
   double Lambda = 20.0 * beta;
   double eps    = 1.0e-4;
   // DLR generation
-  auto dlr_rf        = build_dlr_rf(Lambda, eps);
-  auto itops         = imtime_ops(Lambda, dlr_rf);
+  auto dlr_rf        = build_dlr_rf(Lambda, eps, true);
+  auto itops         = imtime_ops(Lambda, dlr_rf, true);
   auto const &dlr_it = itops.get_itnodes();
   auto dlr_it_abs    = cppdlr::rel2abs(dlr_it);
 

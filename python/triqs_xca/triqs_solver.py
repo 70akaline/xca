@@ -58,7 +58,7 @@ class TriqsSolver:
 
     """
 
-    def __init__(self, beta, gf_struct, eps, w_max, verbose=True):
+    def __init__(self, beta, gf_struct, eps, w_max, dlr_symmetrize=True, verbose=True):
 
         self.verbose = verbose
         
@@ -66,9 +66,10 @@ class TriqsSolver:
         self.gf_struct = gf_struct
         self.eps = eps
         self.w_max = w_max
+        self.dlr_symmetrize = dlr_symmetrize
         
-        self.dmesh = MeshDLR(beta=beta, statistic='Fermion', eps=eps, w_max=w_max)        
-        self.tmesh = MeshDLRImTime(beta=beta, statistic='Fermion', eps=eps, w_max=w_max)        
+        self.dmesh = MeshDLR(beta=beta, statistic='Fermion', eps=eps, w_max=w_max, symmetrize=dlr_symmetrize)
+        self.tmesh = MeshDLRImTime(beta=beta, statistic='Fermion', eps=eps, w_max=w_max, symmetrize=dlr_symmetrize)
 
         self.Delta_tau = BlockGf(mesh=self.tmesh, gf_struct=self.gf_struct)
         
@@ -81,7 +82,7 @@ class TriqsSolver:
         H_loc = 0 * Operator()
         
         lamb = beta * w_max
-        self.S = Solver(beta, lamb, eps, H_loc, fundamental_operators, verbose=verbose)
+        self.S = Solver(beta, lamb, eps, H_loc, fundamental_operators, dlr_symmetrize=dlr_symmetrize, verbose=verbose)
         
         np.testing.assert_array_almost_equal(self.dmesh.values(), self.S.dlr_rf)
         np.testing.assert_array_almost_equal(self.tmesh.values(), self.S.tau_i)

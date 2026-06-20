@@ -20,7 +20,7 @@ def solve_one_spinful_fermion_block_sparse_solver(
         dmft_maxiter=20, dmft_tol=1e-5, 
         ppsc_maxiter=20, ppsc_tol=1e-8,
         S_old=None, delta_mix=1.0, ppsc_mix=1.0,
-        hyb_tol=1e-8, dlr_symmetrize=False,
+        hyb_tol=1e-8, dlr_symmetrize=True,
         ):
     
     spin_names = ['up', 'do']

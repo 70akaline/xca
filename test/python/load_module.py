@@ -35,6 +35,6 @@ F = np.zeros((nops, n, n), dtype=complex)
 F[:] = np.eye(n)[None, ...]
 F_dag = F
 
-dlr_rf = build_dlr_rf(lamb, eps)
-ito = ImTimeOps(lamb, dlr_rf)
+dlr_rf = build_dlr_rf(lamb, eps, True)
+ito = ImTimeOps(lamb, dlr_rf, symmetrize=True)
 diagramsolver = Fastdiagram(beta, lamb, ito, F, F_dag)
