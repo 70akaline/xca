@@ -115,7 +115,27 @@ class TriqsSolver:
             Pseudo-particle energy shift update strategy (default: `True`)
 
         mix : float, optional
-            Linear mixing ratio in the range [0, 1] (default: `1.0`)
+            Mixing ratio in the range [0, 1] (default: `1.0`)
+
+        mixing : str, optional
+            Outer pseudo-particle propagator mixing strategy, either `linear`
+            `diis`, or `cdiis` (default: `linear`). `diis` uses the
+            fixed-point difference residual. `cdiis` uses the Green's-function
+            commutator residual in DLR Matsubara frequency, following the
+            generalized CDIIS construction of Pokhilko et al.
+
+        diis_history : int, optional
+            Number of previous candidates used by DIIS/CDIIS mixing
+            (default: `6`)
+
+        diis_start : int, optional
+            Number of residuals to collect before DIIS/CDIIS extrapolation starts
+            (default: `2`)
+
+        diis_trust_radius : float/None, optional
+            Optional DIIS step restriction radius for the extrapolation
+            coefficients, following the CDIIS step-restriction procedure.
+            If `None`, no step restriction is applied (default: `None`)
 
         verbose : bool, optional
             Verbose printouts (default: `True`)
