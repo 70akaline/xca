@@ -34,7 +34,7 @@ from .pycppdlr import ImTimeOps
 from .impurity import Fastdiagram
 from .dlr_dyson_ppsc import DysonItPPSC
 from .diag import all_connected_pairings
-from .mixing import DIISMixer
+from .mixing import DIISMixer, cdiis_commutator_residual
 
 from .ase.utils.timing import Timer, timer
 
@@ -699,32 +699,18 @@ class Solver(object):
 
             C_jj(iw) = [G_j(iw), G0^{-1}(iw) - Sigma_j(iw)].
 
+        Reference: P. Pokhilko, C.-N. Yeh, and D. Zgid, J. Chem. Phys. 156,
+        094101 (2022), DOI: 10.1063/5.0082586.
+
         For the pseudo-particle Dyson equation the shifted inverse operator is
         ``G0^{-1}(iw) - eta * I - dmu * N - Sigma(iw)``.  The residual is
         transformed back to DLR imaginary time before entering the DIIS Gram
         matrix, matching the paper's time-domain residual overlap.
         """
-        from triqs.gf import Gf, make_gf_dlr_imfreq, make_gf_dlr_imtime
+        return cdiis_commutator_residual(
+            self.beta, self.ito, G_iaa, self.G0_iaa, Sigma_iaa, eta,
+            self.N_op, dmu=dmu, symmetrize=self.dlr_symmetrize)
 
-        G_w = make_gf_dlr_imfreq(self.__array_to_dlr_imtime_gf(G_iaa))
-        G0_w = make_gf_dlr_imfreq(self.__array_to_dlr_imtime_gf(self.G0_iaa))
-        Sigma_w = make_gf_dlr_imfreq(self.__array_to_dlr_imtime_gf(Sigma_iaa))
-
-        n_orb = G_iaa.shape[1]
-        identity = np.eye(n_orb, dtype=complex)
-        cdiis_w = Gf(mesh=G_w.mesh, target_shape=[n_orb, n_orb])
-
-        static_shift = eta * identity + dmu * self.N_op
-        for n in range(G_w.data.shape[0]):
-            try:
-                g0_inverse = np.linalg.solve(G0_w.data[n], identity)
-            except np.linalg.LinAlgError:
-                g0_inverse = np.linalg.pinv(G0_w.data[n])
-            dyson_inverse = g0_inverse - static_shift - Sigma_w.data[n]
-            cdiis_w.data[n] = G_w.data[n] @ dyson_inverse - dyson_inverse @ G_w.data[n]
-
-        return make_gf_dlr_imtime(cdiis_w).data
-            
 
     @timer('Dyson equation')
     def solve_dyson(self, Sigma_iaa, eta, tol, iterative=False, dmu=0.0):
