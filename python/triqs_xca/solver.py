@@ -28,8 +28,6 @@ from mpi4py import MPI as mpi
 
 from pyed.TriqsExactDiagonalization import TriqsExactDiagonalization
 
-from .adapol_depr.fit_utils_xca import polefitting
-
 from .pycppdlr import build_dlr_rf
 from .pycppdlr import ImTimeOps
 
@@ -293,7 +291,7 @@ class Solver(object):
                 print(f"AdaPol: Hybridization using all {self.ito.rank()} DLR poles.")
             
         else:
-            # decomposition and reflection of Delta(t) using aaa poles
+            # Compress the DLR sum-of-poles representation with adapol dev_hs.
             delta_xaa = self.ito.vals2coefs(delta_iaa) 
             self.fd.hyb_init(delta_iaa, poledlrflag=False)
 
@@ -304,14 +302,27 @@ class Solver(object):
 
             dlr_if_dense = self.fd.dlr_if_dense
 
-            Deltat = self.interp(delta_xaa)
-            Deltaiw_dense = eval_dlr_freq(delta_xaa, 1j*dlr_if_dense, self.beta, self.dlr_rf)
-            Npmax = Deltaiw_dense.shape[0] -1
-            weights, pol, error = polefitting(
-                Deltaiw_dense, 1.j*dlr_if_dense, delta_iaa, self.tau_i, Deltat, self.tau_f,self.beta,
-                eps=epstol, Np_max=Npmax, Hermitian=Hermitian)
+            try:
+                from adapol.sop_compr import SumOfPolesCompression
 
-            if error < epstol and len(pol)<=len(self.tau_i):
+                sc = SumOfPolesCompression(
+                    poles=self.dlr_rf / self.beta,
+                    residues=delta_xaa,
+                    Z=1.j * dlr_if_dense,
+                    beta=self.beta,
+                    tol=epstol,
+                    nonlinear_optimize=False,
+                    nonlinear_post_optimize=False,
+                    verbose=verbose and is_root())
+
+                pol, weights, error = sc.poles, sc.residues, sc.error
+
+            except ValueError as e:
+                if is_root() and verbose:
+                    print(f'AdaPol: WARNING! Hybridization compression failed with error: {e}. Using all DLR poles.')
+                pol, weights, error = None, None, None
+
+            if error is not None and error < epstol and len(pol)<=len(self.tau_i):
                 if is_root() and verbose:
                     print(f"AdaPol: Hybridization fit accuracy {error:2.2E}, using {len(pol)} poles.")
                 
