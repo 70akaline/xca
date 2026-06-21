@@ -21,11 +21,6 @@ using c2py::operator""_a;
 
 // ==================== enums =====================
 
-template <> constexpr bool c2py::is_wrapped<cppdlr::statistic_t> = true;
-template <>
-const std::map<cppdlr::statistic_t, str_t> c2py::enum_to_string<cppdlr::statistic_t> = {{cppdlr::statistic_t::Boson, "Boson"},
-                                                                                        {cppdlr::statistic_t::Fermion, "Fermion"}};
-
 // ==================== module classes =====================
 
 // --------- class _c2py_cls_0 -----------
