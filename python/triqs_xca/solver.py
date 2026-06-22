@@ -158,11 +158,11 @@ class Solver(object):
 
     def __init__(self, beta, lamb, eps,
                  H_loc, fundamental_operators,
-                 ntau=100, timer=None, G_iaa=None, eta=None, verbose=True):
+                 ntau=100, timer=None, G_iaa=None, eta=None, dlr_symmetrize=False, verbose=True):
 
         self.timer = timer if timer is not None else Timer()
 
-        self.__setup_dlr_basis(beta, lamb, eps)
+        self.__setup_dlr_basis(beta, lamb, eps, dlr_symmetrize)
         self.__setup_ed_solver(beta, H_loc, fundamental_operators)
         self.__setup_ppsc_solver()
         self.__setup_initial_guess(G_iaa=G_iaa, eta=eta)
@@ -181,10 +181,11 @@ class Solver(object):
         if verbose: self._print_info()
 
 
-    def __setup_dlr_basis(self, beta, lamb, eps):
-        self.beta, self.lamb, self.eps = beta, lamb, eps        
-        self.dlr_rf = build_dlr_rf(lamb, eps)
-        self.ito = ImTimeOps(lamb, self.dlr_rf)
+    def __setup_dlr_basis(self, beta, lamb, eps, dlr_symmetrize):
+        self.beta, self.lamb, self.eps = beta, lamb, eps
+        self.dlr_symmetrize = dlr_symmetrize
+        self.dlr_rf = build_dlr_rf(lamb, eps, dlr_symmetrize)
+        self.ito = ImTimeOps(lamb, self.dlr_rf, symmetrize=dlr_symmetrize)
         
 
     def __setup_ed_solver(self, beta, H_loc, fundamental_operators):

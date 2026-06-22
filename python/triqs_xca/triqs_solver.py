@@ -29,6 +29,9 @@ from triqs.operators import c, Operator
 
 
 from triqs_xca.solver import Solver, is_root
+from triqs_xca.dlr_conversion import converted_dlr_eps as _converted_dlr_eps
+from triqs_xca.dlr_conversion import copy_blockgf_to_mesh
+from triqs_xca.dlr_conversion import resample_dlr_imtime_data
 
 
 class TriqsSolver:
@@ -58,7 +61,7 @@ class TriqsSolver:
 
     """
 
-    def __init__(self, beta, gf_struct, eps, w_max, verbose=True):
+    def __init__(self, beta, gf_struct, eps, w_max, dlr_symmetrize=False, verbose=True):
 
         self.verbose = verbose
         
@@ -66,9 +69,11 @@ class TriqsSolver:
         self.gf_struct = gf_struct
         self.eps = eps
         self.w_max = w_max
-        
-        self.dmesh = MeshDLR(beta=beta, statistic='Fermion', eps=eps, w_max=w_max, symmetrize=False)
-        self.tmesh = MeshDLRImTime(beta=beta, statistic='Fermion', eps=eps, w_max=w_max, symmetrize=False)
+        self.dlr_eps = eps
+        self.dlr_symmetrize = dlr_symmetrize
+
+        self.dmesh = MeshDLR(beta=beta, statistic='Fermion', eps=self.dlr_eps, w_max=w_max, symmetrize=dlr_symmetrize)
+        self.tmesh = MeshDLRImTime(beta=beta, statistic='Fermion', eps=self.dlr_eps, w_max=w_max, symmetrize=dlr_symmetrize)
 
         self.Delta_tau = BlockGf(mesh=self.tmesh, gf_struct=self.gf_struct)
         
@@ -81,13 +86,15 @@ class TriqsSolver:
         H_loc = 0 * Operator()
         
         lamb = beta * w_max
-        self.S = Solver(beta, lamb, eps, H_loc, fundamental_operators, verbose=verbose)
+        self.S = Solver(beta, lamb, eps, H_loc, fundamental_operators, dlr_symmetrize=dlr_symmetrize, verbose=verbose)
         
         np.testing.assert_array_almost_equal(self.dmesh.values(), self.S.dlr_rf)
         np.testing.assert_array_almost_equal(self.tmesh.values(), self.S.tau_i)
 
 
-    def solve(self, h_int, order, compress_hybridization=True, **kwargs):
+    def solve(self, h_int, order, compress_hybridization=True,
+              auto_convert_symmetric_dlr=True, converted_dlr_eps=None,
+              **kwargs):
 
         r""" Self-consistent solution of the pseudo-particle Green's function
         and pseudo-particle self-energy.
@@ -104,6 +111,13 @@ class TriqsSolver:
         compress_hybridization : bool, optional
             Use AAA compression of the hybridization function (default: `True`)
             (If `False` the DLR basis is used to represent the hybridization function.)
+        auto_convert_symmetric_dlr : bool, optional
+            If ``True`` and a symmetric DLR mesh is used for an expansion order
+            larger than 2, rebuild the internal mesh as non-symmetric before
+            diagram evaluation. Default: ``True``.
+        converted_dlr_eps : float, optional
+            DLR tolerance used for that internal conversion. If not provided,
+            it defaults to ``0.1 * eps``.
 
         tol : float, optional
             Pseudo-particle self-consistency convergence tolerance (default: `1e-9`)
@@ -174,6 +188,12 @@ class TriqsSolver:
 
         self.order = order
         self.h_int = h_int
+
+        self.__prepare_dlr_for_order(
+            order,
+            auto_convert_symmetric_dlr=auto_convert_symmetric_dlr,
+            converted_dlr_eps=converted_dlr_eps,
+            verbose=verbose)
         
         self.S.set_H_loc(h_int)
         self.S.G_iaa = self.S.G0_iaa.copy() # Fixme: use S.__setup_initial_guess?
@@ -223,6 +243,66 @@ class TriqsSolver:
             sidx += size
 
         return G
+
+
+    def __auto_unsymmetrized_dlr_eps(self, converted_dlr_eps):
+        return _converted_dlr_eps(self.eps, converted_dlr_eps)
+
+
+    def __prepare_dlr_for_order(
+            self, order, auto_convert_symmetric_dlr=True,
+            converted_dlr_eps=None, verbose=True):
+        if not auto_convert_symmetric_dlr or order <= 2 or not self.dlr_symmetrize:
+            return
+
+        dlr_eps = self.__auto_unsymmetrized_dlr_eps(converted_dlr_eps)
+
+        if is_root() and verbose:
+            print(
+                'DLR: converting symmetric DLR mesh to non-symmetric '
+                f'DLR for order {order} '
+                f'(eps {self.dlr_eps:2.2E} -> {dlr_eps:2.2E}).')
+
+        self.__convert_to_dlr_mesh(dlr_symmetrize=False, dlr_eps=dlr_eps)
+
+
+    def __convert_to_dlr_mesh(self, dlr_symmetrize, dlr_eps):
+        old_dlr_symmetrize = self.dlr_symmetrize
+        old_dlr_eps = self.dlr_eps
+        old_Delta_tau = self.Delta_tau
+
+        self.dlr_eps = dlr_eps
+        self.dlr_symmetrize = dlr_symmetrize
+        self.dmesh = MeshDLR(
+            beta=self.beta, statistic='Fermion', eps=self.dlr_eps,
+            w_max=self.w_max, symmetrize=self.dlr_symmetrize)
+        self.tmesh = MeshDLRImTime(
+            beta=self.beta, statistic='Fermion', eps=self.dlr_eps,
+            w_max=self.w_max, symmetrize=self.dlr_symmetrize)
+
+        self.Delta_tau = BlockGf(mesh=self.tmesh, gf_struct=self.gf_struct)
+        copy_blockgf_to_mesh(
+            old_Delta_tau, self.Delta_tau, self.beta, self.w_max,
+            old_dlr_eps, old_dlr_symmetrize)
+
+        H_loc = getattr(self, 'h_int', self.S.H_loc)
+        G_iaa = None
+        eta = None
+        if hasattr(self.S, 'G_iaa'):
+            G_iaa = resample_dlr_imtime_data(
+                self.S.G_iaa, self.beta, self.w_max, self.tmesh,
+                old_dlr_eps, old_dlr_symmetrize)
+        if hasattr(self.S, 'eta'):
+            eta = self.S.eta
+
+        lamb = self.beta * self.w_max
+        self.S = Solver(
+            self.beta, lamb, self.dlr_eps, H_loc,
+            self.S.fundamental_operators, G_iaa=G_iaa, eta=eta,
+            dlr_symmetrize=self.dlr_symmetrize, verbose=False)
+
+        np.testing.assert_array_almost_equal(self.dmesh.values(), self.S.dlr_rf)
+        np.testing.assert_array_almost_equal(self.tmesh.values(), self.S.tau_i)
 
 
     def __skip_keys(self):

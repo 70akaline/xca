@@ -17,6 +17,7 @@ set(all_tests
   offdiagonal_nca
   test_diag
   unitary_invariance
+  dlr_conversion
   h5_io
   h5_io_bs
   dense
