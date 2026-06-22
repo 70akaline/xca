@@ -18,6 +18,8 @@ from .dense import DenseDiagramEvaluator
 from .block_sparse import trace
 from .block_sparse import convolve_ppsc as conv
 from .block_sparse import expectation_value
+from .dlr_conversion import converted_dlr_eps as _converted_dlr_eps
+from .dlr_conversion import copy_blockgf_to_mesh
 
 from .ase.utils.timing import Timer, timer
 
@@ -84,6 +86,7 @@ class BlockSparseSolver(object):
         self.beta = beta
         self.w_max = w_max
         self.eps = eps
+        self.dlr_eps = eps
         self.conserved_operators = conserved_operators
         self.verbose = verbose
         self.has_dynamic_interactions = False        
@@ -103,7 +106,7 @@ class BlockSparseSolver(object):
 
         self.eta = 0. # Pseudo particle chemical potential (shift of the pseudo particle energies).
 
-        self.mesh_tau = MeshDLRImTime(beta=self.beta, statistic='Fermion', w_max=self.w_max, eps=self.eps, symmetrize=self.dlr_symmetrize)
+        self.mesh_tau = MeshDLRImTime(beta=self.beta, statistic='Fermion', w_max=self.w_max, eps=self.dlr_eps, symmetrize=self.dlr_symmetrize)
 
         self.Delta_tau = BlockGf(mesh=self.mesh_tau, gf_struct=self.gf_struct, name='Delta_tau')
 
@@ -132,7 +135,7 @@ class BlockSparseSolver(object):
         # FIXME! Get ito from mesh_tau
         from .pycppdlr import build_dlr_rf
         from .pycppdlr import ImTimeOps
-        ito = ImTimeOps(w_max * beta, build_dlr_rf(w_max * beta, eps, self.dlr_symmetrize), symmetrize=self.dlr_symmetrize)
+        ito = ImTimeOps(w_max * beta, build_dlr_rf(w_max * beta, self.dlr_eps, self.dlr_symmetrize), symmetrize=self.dlr_symmetrize)
 
         # Compare DLR meshes
         #np.testing.assert_array_almost_equal(np.array([ float(t) for t in self.mesh_tau]), ito.get_itnodes() * beta)
@@ -142,6 +145,84 @@ class BlockSparseSolver(object):
 
         self.timer.stop()
         self.timer.stop()
+
+
+    def __auto_unsymmetrized_dlr_eps(self, converted_dlr_eps):
+        return _converted_dlr_eps(self.eps, converted_dlr_eps)
+
+
+    def __prepare_dlr_for_order(
+            self, max_order, auto_convert_symmetric_dlr=True,
+            converted_dlr_eps=None, verbose=True):
+        if not auto_convert_symmetric_dlr or max_order <= 2 or not self.dlr_symmetrize:
+            return
+
+        dlr_eps = self.__auto_unsymmetrized_dlr_eps(converted_dlr_eps)
+
+        if verbose and is_root():
+            print(
+                'DLR: converting symmetric DLR mesh to non-symmetric '
+                f'DLR for order {max_order} '
+                f'(eps {self.dlr_eps:2.2E} -> {dlr_eps:2.2E}).')
+
+        self.__convert_to_dlr_mesh(dlr_symmetrize=False, dlr_eps=dlr_eps)
+
+
+    def __convert_to_dlr_mesh(self, dlr_symmetrize, dlr_eps):
+        old_dlr_symmetrize = self.dlr_symmetrize
+        old_dlr_eps = self.dlr_eps
+
+        old_Delta_tau = self.Delta_tau
+        old_G = getattr(self, 'G', None)
+        old_Sigma = getattr(self, 'Sigma', None)
+
+        mesh_tau = MeshDLRImTime(
+            beta=self.beta, statistic='Fermion', w_max=self.w_max,
+            eps=dlr_eps, symmetrize=dlr_symmetrize)
+
+        Delta_tau = BlockGf(
+            mesh=mesh_tau, gf_struct=self.gf_struct, name='Delta_tau')
+        copy_blockgf_to_mesh(
+            old_Delta_tau, Delta_tau, self.beta, self.w_max,
+            old_dlr_eps, old_dlr_symmetrize)
+
+        self.dlr_symmetrize = dlr_symmetrize
+        self.dlr_eps = dlr_eps
+        self.mesh_tau = mesh_tau
+        self.Delta_tau = Delta_tau
+
+        self.G0, self.eta0 = atomic_pseudo_particle_greens_function(
+            self.atom_diag, self.beta, self.mesh_tau)
+
+        self.G = self.G0.copy()
+        if old_G is not None:
+            copy_blockgf_to_mesh(
+                old_G, self.G, self.beta, self.w_max,
+                old_dlr_eps, old_dlr_symmetrize)
+
+        self.Sigma = self.get_zero_pseudo_particle_propagator()
+        if old_Sigma is not None:
+            copy_blockgf_to_mesh(
+                old_Sigma, self.Sigma, self.beta, self.w_max,
+                old_dlr_eps, old_dlr_symmetrize)
+
+        from .pycppdlr import build_dlr_rf
+        from .pycppdlr import ImTimeOps
+        lamb = self.w_max * self.beta
+        ito = ImTimeOps(
+            lamb, build_dlr_rf(lamb, self.dlr_eps, self.dlr_symmetrize),
+            symmetrize=self.dlr_symmetrize)
+
+        np.testing.assert_array_almost_equal(
+            self.mesh_tau.dlr_freq, ito.get_rfnodes())
+
+        self.dysons = [
+            DysonItPPSC(self.beta, ito, G0_block.data)
+            for _, G0_block in self.G0]
+
+        for attr in ('hyb', 'd', 'G_tau', 'spgf'):
+            if hasattr(self, attr):
+                delattr(self, attr)
 
 
     @timer('Adapol hybridization fit')
@@ -249,7 +330,8 @@ class BlockSparseSolver(object):
         #if is_root(): print(f'done.')
 
 
-    def solve(self, max_order, tol=1e-4, maxiter=10, mix=1., hyb_tol=None, hyb_comp=True, normalization='classic', spgf_max_order=None, verbose=True):
+    def solve(self, max_order, tol=1e-4, maxiter=10, mix=1., hyb_tol=None, hyb_comp=True, normalization='classic', spgf_max_order=None, verbose=True,
+              auto_convert_symmetric_dlr=True, converted_dlr_eps=None):
         """ Solve the impurity problem using pseudo particle self-consistent perturbation theory.
 
         Parameters
@@ -271,6 +353,13 @@ class BlockSparseSolver(object):
             Maximum order for the single particle Green's function evaluation. If not provided, it defaults to ``max_order``.
         normalization : str, optional
             Normalization method for the pseudo particle Green's function. Default: ``'classic'``.
+        auto_convert_symmetric_dlr : bool, optional
+            If ``True`` and a symmetric DLR mesh is used for an expansion order
+            larger than 2, rebuild the internal mesh as non-symmetric before
+            diagram evaluation. Default: ``True``.
+        converted_dlr_eps : float, optional
+            DLR tolerance used for that internal conversion. If not provided,
+            it defaults to ``0.1 * eps``.
 
         Returns
         -------
@@ -293,6 +382,11 @@ class BlockSparseSolver(object):
         self.normalization = normalization
         self.max_order = max_order
         self.spgf_max_order = spgf_max_order if spgf_max_order is not None else max_order
+        self.__prepare_dlr_for_order(
+            max(self.max_order, self.spgf_max_order),
+            auto_convert_symmetric_dlr=auto_convert_symmetric_dlr,
+            converted_dlr_eps=converted_dlr_eps,
+            verbose=verbose)
 
         self.hyb_tol = hyb_tol if hyb_tol is not None else 0.1 * tol
 
@@ -366,7 +460,8 @@ class BlockSparseSolver(object):
             print(); self.timer.write()
 
 
-    def solve_bare(self, max_order, hyb_tol=None, hyb_comp=True, use_dyson=False, spgf_max_order=None, verbose=True):
+    def solve_bare(self, max_order, hyb_tol=None, hyb_comp=True, use_dyson=False, spgf_max_order=None, verbose=True,
+                   auto_convert_symmetric_dlr=True, converted_dlr_eps=None):
         """ Solve the impurity problem using the bare pseudo particle self-consistent perturbation theory,
         i.e. with the pseudo particle self-energy evaluated using the atomic pseudo particle Green's function.
 
@@ -400,10 +495,22 @@ class BlockSparseSolver(object):
             Maximum order for the single particle Green's function evaluation. If not provided, it defaults to ``max_order``.
         verbose : bool, optional
             Verbosity flag controlling level of printouts. Default: ``True``.
+        auto_convert_symmetric_dlr : bool, optional
+            If ``True`` and a symmetric DLR mesh is used for an expansion order
+            larger than 2, rebuild the internal mesh as non-symmetric before
+            diagram evaluation. Default: ``True``.
+        converted_dlr_eps : float, optional
+            DLR tolerance used for that internal conversion. If not provided,
+            it defaults to ``0.1 * eps``.
         """
 
         self.max_order = max_order
         self.spgf_max_order = spgf_max_order if spgf_max_order is not None else max_order
+        self.__prepare_dlr_for_order(
+            max(self.max_order, self.spgf_max_order),
+            auto_convert_symmetric_dlr=auto_convert_symmetric_dlr,
+            converted_dlr_eps=converted_dlr_eps,
+            verbose=verbose)
 
         self.hyb_tol = hyb_tol if hyb_tol is not None else 10 * self.eps
         self.hyb_comp = hyb_comp if max_order > 1 else False # Skip hybridization compression for max_order = 1 (NCA) since the pole representation is not used.
@@ -1237,12 +1344,18 @@ class BlockSparseSolver(object):
 
     @classmethod
     def __factory_from_dict__(cls, name, d):
-        arg_keys = ['H_loc', 'beta', 'w_max', 'eps', 'gf_struct', 'conserved_operators']
+        arg_keys = ['H_loc', 'beta', 'w_max', 'eps', 'gf_struct', 'conserved_operators', 'dlr_symmetrize']
         argv_keys = ['atom_diag', 'verbose']
         verbose = d['verbose']
         d['verbose'] = False # -- Suppress printouts on reconstruction from dict
-        ret = cls(*[ d[key] for key in arg_keys ],
-                  **{ key : d[key] for key in argv_keys })
+        if 'dlr_symmetrize' not in d:
+            d['dlr_symmetrize'] = True
+        if 'dlr_eps' not in d:
+            d['dlr_eps'] = d['eps']
+        init_d = d.copy()
+        init_d['eps'] = d['dlr_eps']
+        ret = cls(*[ init_d[key] for key in arg_keys ],
+                  **{ key : init_d[key] for key in argv_keys })
         ret.__dict__.update(d)
         ret.verbose = verbose
         return ret
