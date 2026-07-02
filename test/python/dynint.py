@@ -68,21 +68,12 @@ def test_dynint_one_fermion(
     D0_tau = Gf(mesh=b_mesh, target_shape=[1, 1])
     D0_iw = make_gf_dlr_imfreq(D0_tau)
     D0_iw << -2 * g**2 * omega0 * inverse(omega0**2 - iOmega_n*iOmega_n)
-
     D0_iw << 0.5 * D0_iw # FIXME! Compensate for double number of Sigma diagrams for retarded interactions
-
     D0_tau << make_gf_dlr_imtime(D0_iw)
-    D0_c = make_gf_dlr(D0_iw)
 
-    r = S.Delta_tau['0'].data.shape[0]
+    S.set_dynamic_interactions(dynint_ops=[n('0', 0)], dynint_tau=D0_tau)
 
-    dynint_ops = [n('0', 0)]
-    dynint_coeffs = np.zeros([r, 1, 1], dtype=complex)
-
-    dynint_coeffs[:] = D0_c.data
-
-    S.set_dynamic_interactions(dynint_ops, dynint_coeffs)
-    S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=False)
+    S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=True)
 
     g_tau_ed_0, chi_tau_ed_0 = get_ed_ref(eps0 - mu, 0.0, omega0, f_mesh, b_mesh, Nb_max=10)
     g_tau_ed, chi_tau_ed = get_ed_ref(eps0 - mu, g, omega0, f_mesh, b_mesh, Nb_max=10)

@@ -147,7 +147,18 @@ class BlockSparseSolver(object):
     @timer('Adapol hybridization fit')
     def fit_hybridization(self, tol=None, compression=False, verbose=True):
 
+        assert( self.mesh_tau == self.Delta_tau.mesh ), 'Error: Delta_tau mesh must match solver mesh_tau'
+
         Delta_tau_dense = self.__from_blockgf_to_dense(self.Delta_tau)
+
+        if self.has_dynamic_interactions:
+            assert( self.mesh_tau == self.dynint_tau.mesh ), 'Error: dynint_tau mesh must match solver mesh_tau'
+            Delta_dynint_tau = BlockGf(name_list=['Delta', 'dynint'], block_list=[Delta_tau_dense, self.dynint_tau])
+            Delta_dynint_tau_dense = self.__from_blockgf_to_dense(Delta_dynint_tau)
+
+            # Pretend that dynint is part of Delta during compresssion
+            # split up Delta and dynint before assigning at the end of this function
+            Delta_tau_dense = Delta_dynint_tau_dense
 
         if compression:
 
@@ -178,6 +189,13 @@ class BlockSparseSolver(object):
 
             if verbose and is_root():
                 print(f'Hybridization: using DLR expansion with N_poles = {len(poles)}')
+
+        if self.has_dynamic_interactions:
+            # Split up Delta and dynint after compression
+            # pole_weights contains both Delta and dynint coefficients
+            n, m = Delta_dynint_tau['Delta'].target_shape
+            self.dynint_coeffs = pole_weights[:, n:, m:] # Second diagonal block
+            pole_weights = pole_weights[:, :n, :m] # First diagonal block
 
         self.set_hybridization_poles_and_coefficients(poles, pole_weights)
 
@@ -228,10 +246,26 @@ class BlockSparseSolver(object):
             #print(f'hyb.coefficients =\n{self.hyb.coefficients}')
 
 
-    def set_dynamic_interactions(self, dynint_ops, dynint_coeffs):
+    def set_dynamic_interactions(self, dynint_ops, dynint_tau):
+
+        assert( dynint_tau.mesh.beta == self.mesh_tau.beta )
+        assert( dynint_tau.mesh.w_max <= self.mesh_tau.w_max )
+        assert( dynint_tau.mesh.eps >= self.mesh_tau.eps )
+
         self.has_dynamic_interactions = True
         self.dynint_ops = dynint_ops
-        self.dynint_coeffs = dynint_coeffs
+
+        # Reinterpolate dynint_tau onto the solver mesh_tau if necessary
+        if dynint_tau.mesh != self.mesh_tau:
+            dynint_dlr = make_gf_dlr(dynint_tau)
+            dynint_tau_new = Gf(mesh=self.mesh_tau, target_shape=dynint_tau.target_shape)
+
+            for tau in self.mesh_tau:
+                dynint_tau_new[tau] = dynint_dlr(tau)
+
+            dynint_tau = dynint_tau_new
+
+        self.dynint_tau = dynint_tau.copy()
 
 
     @timer('DiagramEvaluator Init')

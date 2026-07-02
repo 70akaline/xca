@@ -64,10 +64,11 @@ namespace triqs_xca::dynint {
             auto op_mat = U_mat * ad.get_op_mat(op).block_mat[0] * nda::conj(nda::transpose(U_mat));
             Fs_ext(n_hyb + i, _, _) = op_mat;
             Fdags_ext(n_hyb + i, _, _) = nda::conj(nda::transpose(op_mat));
-            std::cout << "i = " << i << ", op = " << op << std::endl;
-            std::cout << "op_mat =" << op_mat << std::endl;
+            //std::cout << "i = " << i << ", op = " << op << std::endl;
+            //std::cout << "op_mat =" << op_mat << std::endl;
         }
 
+        /*
         for(int i = 0; i < n_ext; ++i) {
             std::cout << "Operator (ext) " << i << ":\n";
             std::cout << "F_ext =" << Fs_ext(i, _, _) << "\n";
@@ -80,6 +81,7 @@ namespace triqs_xca::dynint {
                 std::cout << ext_coeffs(_, i, j) << "\n";
             }
         }
+        */
         
         return DenseFSet{Fs_ext, Fdags_ext, ext_coeffs};
     }
