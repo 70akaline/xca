@@ -399,6 +399,13 @@ namespace triqs_xca::dense {
     int fermionic_sign = backbone.get_parity();
     correlator *= fermionic_sign;
 
+    /*
+    std::cout << "n = " << n << ", n_int = " << n_int << std::endl;
+    std::cout << "f_ix = " << f_ix << ", fermionic_sign = " << fermionic_sign << std::endl;
+    //std::cout << "topology = " << backbone.get_topology() << std::endl;
+    std::cout << "orb_idx_flag = " << orb_idx_flag << " is_fermionic = " << is_fermionic << std::endl;
+    */
+
     backbone.reset_all_inds(); // reset directions, pole indices, and orbital indices for the next iteration
 
     return correlator;
@@ -410,7 +417,7 @@ namespace triqs_xca::dense {
   }
 
   nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_single_ptcle_gf(gf_vt G_ppsc, nda::array_const_view<int, 2> topology) {
-    CorrelatorBackbone backbone(topology, n);
+    CorrelatorBackbone backbone(topology, n, n_int);
 
     auto mu_ops  = Fset.Fs;
     auto kap_ops = Fset.F_dags;
@@ -464,7 +471,7 @@ namespace triqs_xca::dense {
                                                      triqs::atom_diag::atom_diag<isComplex> const &ad, nda::array_const_view<int, 2> topology,
                                                      nda::array_const_view<int, 1> f_ix_vec) {
 
-    CorrelatorBackbone backbone(topology, n);
+    CorrelatorBackbone backbone(topology, n, n_int);
 
     // Check Hilbert space dimension.
     assert(N == ad.get_full_hilbert_space_dim());

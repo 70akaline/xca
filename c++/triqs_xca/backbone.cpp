@@ -230,10 +230,11 @@ namespace triqs_xca::backbone {
     // loop over orbital indices and check which ones are fermionic by checking i < n_hyb
     // put the result in a boolean vector of size m, where true means the line is fermionic
     nda::vector<bool> is_fermionic(2 * m);
+    //nda::vector<int> orb_inds_ref(2 * m); // DEBUG
 
     for (auto vertex_idx : range(0, 2 * m)) {
       int orb_ind = vertices[vertex_idx].get_orb();
-
+      //orb_inds_ref(vertex_idx) = orb_ind; // DEBUG
       if (orb_ind >= 0) {
         is_fermionic[vertex_idx] = orb_ind < n_hyb; // fermionic vertex when orbital index is less than n_hyb
       } else if (orb_ind == -2) {
@@ -244,6 +245,15 @@ namespace triqs_xca::backbone {
         throw std::invalid_argument("Orbital index of vertex " + std::to_string(vertex_idx) + " is not set");
       }
     }
+
+    /*
+    std::cout << "n = " << n << ", n_hyb = " << n_hyb << ", n_int = " << n_int << std::endl;
+    std::cout << "topology =" << topology << std::endl;
+    std::cout << "orb_inds     = " << orb_inds << std::endl;
+    std::cout << "orb_inds_ref = " << orb_inds_ref << std::endl;
+    std::cout << "is_fermionic = " << is_fermionic << std::endl;
+    */
+
     auto fermionic_topology = topology::fermionic_topology(topology, is_fermionic);
     int fermionic_parity    = topology::topology_parity(fermionic_topology);
 
@@ -291,12 +301,16 @@ namespace triqs_xca::backbone {
   int Backbone::get_vertex_orb(int i) { return vertices[i].get_orb(); }
   int Backbone::get_edge(int num, int pole_ind) { return edges(num, pole_ind); }
   int Backbone::get_topology(int i, int j) { return topology(i, j); }
+  const nda::array<int, 2> Backbone::get_topology() const { return topology; }
+
   int Backbone::get_pole_ind(int i) { return pole_inds(i); }
   int Backbone::get_fb(int i) { return fb(i); }
   int Backbone::get_orb_ind(int i) { return orb_inds(i); }
   int Backbone::get_flat_index() { return f_ix; }
 
-  CorrelatorBackbone::CorrelatorBackbone(nda::array<int, 2> topology, int n) : Backbone(topology, n) { fb_ix_max = static_cast<int>(pow(2, m - 1)); }
+  CorrelatorBackbone::CorrelatorBackbone(nda::array<int, 2> topology, int n, int n_int) : Backbone(topology, n, n_int) {
+    fb_ix_max = static_cast<int>(pow(2, m - 1));
+  }
 
   void CorrelatorBackbone::set_directions(int fb_ix) {
 

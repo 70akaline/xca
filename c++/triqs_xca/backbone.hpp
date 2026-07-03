@@ -137,6 +137,7 @@ namespace triqs_xca::backbone {
 
     int get_edge(int num, int pole_ind);
     int get_topology(int i, int j);
+    const nda::array<int, 2> get_topology() const;
     int get_pole_ind(int i);
     int get_fb(int i);
     int get_orb_ind(int i);
@@ -182,7 +183,7 @@ namespace triqs_xca::backbone {
    * @param[in] topology list of vertices connected by a hybridization line
    * @param[in] n number of orbital indices
    */
-    CorrelatorBackbone(nda::array<int, 2> topology, int n);
+    CorrelatorBackbone(nda::array<int, 2> topology, int n, int n_int = 0);
   };
 
   /**
