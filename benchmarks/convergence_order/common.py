@@ -10,10 +10,13 @@ class Dummy:
     def __init__(self): pass
 
 
-def plot_comparison(m_dlr, ed_solver, xca_solver, max_order=4, t=-0.5):
-
-    """ Compare XCA solution to ED reference solution for a single fermionic level 
+def run_calc(m_dlr, ed_solver, xca_solver, max_order=1, t=1.0):
+    
+    """ Run a single calculation of the dynamic interaction expansion 
+    and compare to ED reference solution for a single fermionic level 
     coupled to another fermionic level. """
+
+    ed = ed_solver(m_dlr, t=t)
 
     ed = ed_solver(m_dlr, t=t)
 
@@ -23,6 +26,20 @@ def plot_comparison(m_dlr, ed_solver, xca_solver, max_order=4, t=-0.5):
          ox = xca_solver(m_dlr, t=t, sigma_order=order, verbose=True)
          oxs.append(ox)
 
+    d = Dummy()
+    d.ed = ed
+    d.oxs = oxs
+    return d
+
+
+def plot_comparison(m_dlr, ed_solver, xca_solver, max_order=4, t=-0.5):
+
+    """ Compare XCA solution to ED reference solution for a single fermionic level 
+    coupled to another fermionic level. """
+
+    d = run_calc(m_dlr, ed_solver, xca_solver, max_order=max_order, t=t)
+    ed, oxs = d.ed, d.oxs
+
     if mpi.is_master_node():
 
         for ox in oxs:
@@ -30,18 +47,23 @@ def plot_comparison(m_dlr, ed_solver, xca_solver, max_order=4, t=-0.5):
             Chi_err = np.max(np.abs((ox.Chi_tau - ed.Chi_tau).data))
             print(f'O{ox.sigma_order} error: G={G_err:.3e}, Chi={Chi_err:.3e}')
 
-
     if mpi.is_master_node():
 
         from triqs.plot.mpl_interface import oplot, plt
         plt.figure(figsize=(6, 8))
-        subp = [3, 1, 1]
+        subp = [4, 1, 1]
 
         plt.subplot(*subp); subp[-1] += 1
         for ox in oxs:
             oplot(ox.G_tau.real, marker='+', label=f'O{ox.sigma_order} sc')
         oplot(ed.G_tau.real, marker='x', lw=4., alpha=0.5, label='ED')
         plt.ylabel(r'$g(\tau)$')
+        plt.ylim(top=0.)
+
+        plt.subplot(*subp); subp[-1] += 1
+        for ox in oxs:
+            oplot(ox.G_tau.real - ed.G_tau.real, marker='+', label=f'O{ox.sigma_order} sc')
+        plt.ylabel(r'Err $g(\tau)$')
         plt.ylim(top=0.)
 
         plt.subplot(*subp); subp[-1] += 1
@@ -59,34 +81,48 @@ def plot_comparison(m_dlr, ed_solver, xca_solver, max_order=4, t=-0.5):
         plt.show()
 
 
+def run_convergence_calc(m_dlr, ed_solver, xca_solver, max_order=4, t2s=np.logspace(-1.5, 0.5, 4)):
+
+    """ Run a convergence calculation of the dynamic interaction expansion 
+    and compare to ED reference solution for a single fermionic level 
+    coupled to another fermionic level. """
+
+    G_errs_t = []
+    Chi_errs_t = []
+
+    for i, t2 in enumerate(t2s):
+
+        t = -np.sqrt(t2)
+        d = run_calc(m_dlr, ed_solver, xca_solver, max_order=max_order, t=t)
+        ed, oxs = d.ed, d.oxs
+
+        G_errs = np.zeros(max_order)
+        Chi_errs = np.zeros(max_order)
+
+        for ox in oxs:
+            G_errs[ox.sigma_order-1] = np.max(np.abs((ox.G_tau - ed.G_tau).data))
+            Chi_errs[ox.sigma_order-1] = np.max(np.abs((ox.Chi_tau - ed.Chi_tau).data))
+
+        G_errs_t.append(G_errs)
+        Chi_errs_t.append(Chi_errs)
+
+    orders = list(range(1, max_order + 1))
+
+    # Transpose G and Chi
+    G_errss = [ np.array([G_errs_t[j][i] for j in range(len(t2s))]) for i in range(max_order) ]
+    Chi_errss = [ np.array([Chi_errs_t[j][i] for j in range(len(t2s))]) for i in range(max_order) ]
+
+    return orders, G_errss, Chi_errss
+
+
 def test_convergence_rate(m_dlr, ed_solver, xca_solver, label='dimer', max_order=5, do_test=False, verbose=True):
 
     """ Test convergence rate of the dynamic interaction expansion 
     by comparing to ED reference solution for a single fermionic level 
     coupled to another fermionic level. """
 
-    G_errss = []
-    Chi_errss = []
-    orders = list(range(1, max_order + 1))
-    for order in orders:
-        #t2s = np.logspace(-1.5, -0.5, 3)
-        t2s = np.logspace(-1.5, 0.5, 4)
-        G_errs = np.zeros_like(t2s)
-        Chi_errs = np.zeros_like(t2s)
-
-        for i, t2 in enumerate(t2s):
-
-            t = -np.sqrt(t2)
-            ed = ed_solver(m_dlr, t=t)
-            xca = xca_solver(m_dlr, t=t, sigma_order=order, verbose=True)
-
-            G_errs[i] = np.max(np.abs((xca.G_tau - ed.G_tau).data))
-            Chi_errs[i] = np.max(np.abs((xca.Chi_tau - ed.Chi_tau).data))
-            if mpi.is_master_node():
-                print(f'order={order}, t={t:.3f}, error: G={G_errs[i]:.3e}, Chi={Chi_errs[i]:.3e}')
-
-        G_errss.append(G_errs)
-        Chi_errss.append(Chi_errs)
+    t2s = np.logspace(-1.5, 0.5, 4)
+    orders, G_errss, Chi_errss = run_convergence_calc(m_dlr, ed_solver, xca_solver, max_order=max_order, t2s=t2s)
 
     if mpi.is_master_node():
         # Compute convergence rates

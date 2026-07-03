@@ -105,7 +105,7 @@ def xca_two_level_solution_block_sparse(
 
 if __name__ == "__main__":
 
-    m_dlr = MeshDLRImTime(beta=2.3, statistic='Fermion', eps=1e-12, w_max=8.0)
+    m_dlr = MeshDLRImTime(beta=2.3, statistic='Fermion', eps=1e-12, w_max=8.0, symmetrize=False)
 
     #plot_comparison(m_dlr, pyed_two_level_solution, xca_two_level_solution_dense, max_order=3)
     #test_convergence_rate(m_dlr, pyed_two_level_solution, xca_two_level_solution_dense, label='two_level', max_order=4)

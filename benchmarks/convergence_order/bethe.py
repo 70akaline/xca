@@ -110,7 +110,7 @@ def xca_bethe_solution_block_sparse(mesh_tau, t=-1.0, e0=0.1, sigma_order=1, spg
 
 if __name__ == "__main__":
 
-    m_dlr = MeshDLRImTime(beta=2.3, statistic='Fermion', eps=1e-12, w_max=8.0)
+    m_dlr = MeshDLRImTime(beta=2.3, statistic='Fermion', eps=1e-12, w_max=8.0, symmetrize=False)
 
     #plot_comparison(m_dlr, bethe_solution, xca_bethe_solution_dense, max_order=3)
     #plot_comparison(m_dlr, pyed_dimer_solution, xca_bethe_solution_dense, max_order=3)

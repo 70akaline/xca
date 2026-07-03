@@ -76,8 +76,8 @@ def xca_dimer_solution_block_sparse(mesh_tau, t=-1.0, e0=0.1, sigma_order=1, spg
 
 if __name__ == "__main__":
 
-    m_dlr = MeshDLRImTime(beta=2.3, statistic='Fermion', eps=1e-12, w_max=4.0)
+    m_dlr = MeshDLRImTime(beta=2.3, statistic='Fermion', eps=1e-12, w_max=4.0, symmetrize=False)
 
     #plot_comparison(m_dlr, pyed_dimer_solution, xca_dimer_solution_dense, max_order=5)
-    test_convergence_rate(m_dlr, pyed_dimer_solution, xca_dimer_solution_dense, label='dimer', max_order=5)
+    test_convergence_rate(m_dlr, pyed_dimer_solution, xca_dimer_solution_dense, label='dimer', max_order=4)
     #test_convergence_rate(m_dlr, pyed_dimer_solution, xca_dimer_solution_block_sparse, label='dimer', max_order=5)    
