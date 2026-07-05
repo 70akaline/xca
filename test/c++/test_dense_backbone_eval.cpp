@@ -3,6 +3,7 @@
 #include <nda/algorithms.hpp>
 #include <triqs_xca/dense_backbone.hpp>
 #include <triqs_xca/block_sparse_manual.hpp>
+#include <triqs_xca/topology.hpp>
 
 #include <triqs_xca/strong_cpl.hpp>
 
@@ -175,7 +176,7 @@ TEST(DenseBackbone, OCA_semicircle_bath_aaa) {
   auto D                      = DenseDiagramEvaluator(beta, eps, itops, hyb_poles, hyb_coeffs, Fset);
 
   D.eval_self_energy_by_pairs(Gt_dense, B); // evaluate OCA diagram
-  auto OCA_result = D.Sigma;                // get the result from the DiagramEvaluator
+  auto OCA_result = nda::make_regular(-D.Sigma); // remove the internal OCA topology parity before comparing to the manual references
 
   // hyb_refl is Delta(beta - tau), computed exactly via DLR reflection (no sign flip);
   // the DLR coefficients describing it are unchanged (hyb_refl_coeffs = hyb_coeffs), since
@@ -265,6 +266,7 @@ TEST(DenseBackbone, one_fermion_three_orders_const_hyb) {
     bt4                   = bt4 * bt4;
     third_order_se_ana(i) = bt4 * exp(-t * std::numbers::ln2) / 192.0;
   }
+  third_order_se_ana *= triqs_xca::topology::topology_parity(topology);
   ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, 0, 0) - third_order_se_ana)), eps);
 
   // compare individual index evals
@@ -345,6 +347,7 @@ TEST(DenseBackbone, one_fermion_three_orders_hyb_one_pole) {
     third_order_se_ana(i, 1) += (tom * tom + 4 * tom + 2 * (tom - 3) * exp(tom) + 6) * exp(om * (2 * beta - t));
     third_order_se_ana(i, _) *= exp(-t * std::numbers::ln2) / denom;
   }
+  third_order_se_ana *= triqs_xca::topology::topology_parity(topology);
   ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, 0, 0) - third_order_se_ana(_, 0))), eps);
   ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, 1, 1) - third_order_se_ana(_, 1))), eps);
 }
@@ -392,6 +395,7 @@ TEST(DenseBackbone, two_fermions_const_hyb_se) {
     double t      = rel2abs(dlr_it(i)); // t = tau / beta
     oca_se_ana(i) = -0.25 * exp(-t * ln4) * t * t * beta * beta;
   }
+  oca_se_ana *= triqs_xca::topology::topology_parity(topology2);
   for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, i, i) - oca_se_ana)), eps); }
 
   // ----- third-order test -----
@@ -402,6 +406,7 @@ TEST(DenseBackbone, two_fermions_const_hyb_se) {
     double t              = rel2abs(dlr_it(i)); // t = tau / beta
     third_order_se_ana(i) = 1.0 / 96 * exp(-t * ln4) * pow(t, 4) * pow(beta, 4);
   }
+  third_order_se_ana *= triqs_xca::topology::topology_parity(topology3);
   for (int i = 0; i < 4; ++i) { ASSERT_LE(nda::max_element(nda::abs(third_order_se[0].data()(_, i, i) - third_order_se_ana)), eps); }
 }
 
@@ -472,6 +477,7 @@ TEST(DenseBackbone, two_fermions_one_hyb_pole_se) {
     oca_se_ana(i, 1) = exp_beta_om * (-exp_2_om_tau + 2 * exp_om_tau - 1) / (exp_om_tau * denom);
     oca_se_ana(i, 2) = -2.0 * exp_2_beta_om * (om * t * beta * exp_om_tau - exp_om_tau + 1) / (exp_2_om_tau * denom);
   }
+  oca_se_ana *= triqs_xca::topology::topology_parity(topology2);
   ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 0, 0) - oca_se_ana(_, 0))), eps);
   ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 1, 1) - oca_se_ana(_, 1))), eps);
   ASSERT_LE(nda::max_element(nda::abs(oca_se[0].data()(_, 2, 2) - oca_se_ana(_, 1))), eps);
