@@ -627,8 +627,10 @@ class BlockSparseSolver(object):
         for sign, topology in pairings(order):
             if verbose and is_root(): print(f'SIGMA: O{order} topo {topology} sign {sign:+d}')
             topology = np.array(topology, dtype=np.int32)
+            # The C++ evaluator already includes the fermionic topology parity
+            # internally via Backbone::get_parity(), so the order sum must not
+            # re-apply the old topology sign from all_connected_pairings().
             Sigma -= self.__eval_pseudo_particle_self_energy_topology_loop(G, topology, verbose=verbose)
-            
         return Sigma
     
     
@@ -639,8 +641,7 @@ class BlockSparseSolver(object):
         for sign, topology in all_connected_pairings(order):
             if verbose and is_root(): print(f'SIGMA: O{order} topo {topology} sign {sign:+d}')
             topology = np.array(topology, dtype=np.int32)
-            Sigma += pow(-1, order) * sign * \
-                self.__eval_pseudo_particle_self_energy_topology_loop_by_pairs(G, topology, verbose=verbose)
+            Sigma -= self.__eval_pseudo_particle_self_energy_topology_loop_by_pairs(G, topology, verbose=verbose)
 
         return Sigma
 
@@ -656,7 +657,7 @@ class BlockSparseSolver(object):
         n_vec = scatter_array_over_ranks(np.array([f for f in range(n_max) if (f // n_p) % 2 == 0], dtype=np.int32))
 
         Sigma = self.get_zero_pseudo_particle_propagator()
-        Sigma = pow(-1, order+1) * self.d.compute_self_energy_by_pairs(G, topology, n_vec)
+        Sigma = self.d.compute_self_energy_by_pairs(G, topology, n_vec)
         for bidx, sigma_b in Sigma:
             sigma_b.data[:] = mpi.all_reduce(sigma_b.data)
 
@@ -680,7 +681,6 @@ class BlockSparseSolver(object):
             sigma_b.data[:] = mpi.all_reduce(sigma_b.data)
 
         return Sigma
-    
 
     def get_zero_pseudo_particle_propagator(self):
         return zero_pseudo_particle_propagator(self.atom_diag, self.mesh_tau)
