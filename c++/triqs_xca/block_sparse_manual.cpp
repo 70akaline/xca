@@ -809,8 +809,8 @@ nda::array<dcomplex, 3> OCA_dense(nda::array_const_view<dcomplex, 3> hyb, imtime
   int num_Fs           = Fs.extent(0);
 
   // compute Fbars and Fdagbars
-  auto Fdagbars  = nda::array<dcomplex, 4>(num_Fs, r, N, N);
-  auto Fbarsrefl = nda::array<dcomplex, 4>(num_Fs, r, N, N);
+  auto Fdagbars  = nda::zeros<dcomplex>(num_Fs, r, N, N);
+  auto Fbarsrefl = nda::zeros<dcomplex>(num_Fs, r, N, N);
   for (int lam = 0; lam < num_Fs; lam++) {
     for (int l = 0; l < r; l++) {
       for (int nu = 0; nu < num_Fs; nu++) {
@@ -821,7 +821,7 @@ nda::array<dcomplex, 3> OCA_dense(nda::array_const_view<dcomplex, 3> hyb, imtime
   }
 
   // initialize self-energy
-  nda::array<dcomplex, 3> Sigma(r, N, N);
+  nda::array<dcomplex, 3> Sigma = nda::zeros<dcomplex>(r, N, N);
 
   // preallocate intermediate arrays
   nda::array<dcomplex, 3> Sigma_l(r, N, N), T(r, N, N), Tmu(r, N, N), GKt(r, N, N);
@@ -836,7 +836,7 @@ nda::array<dcomplex, 3> OCA_dense(nda::array_const_view<dcomplex, 3> hyb, imtime
       auto const &F2list     = (fb2 == 1) ? Fs(_, _, _) : F_dags(_, _, _);
       auto const &F3list     = (fb1 == 1) ? F_dags(_, _, _) : Fs(_, _, _);
       auto const &Fbar_array = (fb2 == 1) ? Fdagbars(_, _, _, _) : Fbarsrefl(_, _, _, _);
-      int sfM                = -1; // (fb1 ^ fb2) ? 1 : -1; // sign
+      int sfM                = -1; // OCA crossing parity for topology {{0,2},{1,3}}
 
       for (int l = 0; l < r; l++) {
         Sigma_l = 0;
@@ -883,8 +883,8 @@ nda::array<dcomplex, 3> OCA_dense(nda::array_const_view<dcomplex, 3> hyb, nda::a
   int n                                 = Fs.extent(0);
 
   // compute Fbars and Fdagbars
-  auto Fdagbars  = nda::array<dcomplex, 4>(n, p, N, N);
-  auto Fbarsrefl = nda::array<dcomplex, 4>(n, p, N, N);
+  auto Fdagbars  = nda::zeros<dcomplex>(n, p, N, N);
+  auto Fbarsrefl = nda::zeros<dcomplex>(n, p, N, N);
   for (int lam = 0; lam < n; lam++) {
     for (int l = 0; l < p; l++) {
       for (int nu = 0; nu < n; nu++) {
@@ -895,7 +895,7 @@ nda::array<dcomplex, 3> OCA_dense(nda::array_const_view<dcomplex, 3> hyb, nda::a
   }
 
   // initialize self-energy
-  nda::array<dcomplex, 3> Sigma(r, N, N);
+  nda::array<dcomplex, 3> Sigma = nda::zeros<dcomplex>(r, N, N);
 
   // preallocate intermediate arrays
   nda::array<dcomplex, 3> Sigma_l(r, N, N), T(r, N, N), Tmu(r, N, N), GKt(r, N, N);
@@ -910,7 +910,7 @@ nda::array<dcomplex, 3> OCA_dense(nda::array_const_view<dcomplex, 3> hyb, nda::a
       auto const &F2list     = (fb2 == 1) ? Fs(_, _, _) : F_dags(_, _, _);
       auto const &F3list     = (fb1 == 1) ? F_dags(_, _, _) : Fs(_, _, _);
       auto const &Fbar_array = (fb2 == 1) ? Fdagbars(_, _, _, _) : Fbarsrefl(_, _, _, _);
-      int sfM                = -1; // (fb1 ^ fb2) ? 1 : -1; // sign
+      int sfM                = -1; // OCA crossing parity for topology {{0,2},{1,3}}
 
       for (int l = 0; l < p; l++) {
         Sigma_l = 0;
