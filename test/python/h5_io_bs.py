@@ -50,6 +50,9 @@ def test_h5():
     with HDFArchive(filename, 'r') as A: S_ref = A['S']
 
     assert( S == S_ref )
+    assert S_ref.dysons is None
+    S_ref.solve_dyson(S_ref.Sigma, S_ref.eta)
+    assert len(S_ref.dysons) == len(S_ref.G0)
         
     
 if __name__ == '__main__':

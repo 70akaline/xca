@@ -164,6 +164,8 @@ def test_oca_diagram_cf_block_sparse_and_dense(
         conserved_operators=conserved_operators,
         )
 
+    assert BSS.dysons is None
+
     BSS.Delta_tau['0'] << Delta_tau
 
     BSS.fit_hybridization(tol=100*eps, compression=True, verbose=verbose)
@@ -185,6 +187,7 @@ def test_oca_diagram_cf_block_sparse_and_dense(
     np.testing.assert_almost_equal(Z, 1.0)
 
     G_DYSON_BSS = BSS.solve_dyson(BSS.Sigma, BSS.eta) # Solving Dyson with zero self-energy
+    assert len(BSS.dysons) == len(BSS.G0)
     G_DYSON_BSS = pseudo_particle_block_gf_to_dense(G_DYSON_BSS, BSS.atom_diag)
     np.testing.assert_array_almost_equal(G_DYSON_BSS.data, G_S)
 
