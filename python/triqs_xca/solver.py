@@ -35,6 +35,9 @@ from .impurity import Fastdiagram
 from .dlr_dyson_ppsc import DysonItPPSC
 from .diag import all_connected_pairings
 from .mixing import DIISMixer, cdiis_commutator_residual
+from .dlr_conversion import converted_dlr_eps as _converted_dlr_eps
+from .dlr_conversion import resample_dlr_imtime_data_to_tau_rel
+from .dlr_conversion import warn_symmetric_dlr_conversion
 
 from .ase.utils.timing import Timer, timer
 
@@ -158,11 +161,24 @@ class Solver(object):
 
     def __init__(self, beta, lamb, eps,
                  H_loc, fundamental_operators,
-                 ntau=100, timer=None, G_iaa=None, eta=None, dlr_symmetrize=False, verbose=True):
+                 ntau=100, timer=None, G_iaa=None, eta=None,
+                 dlr_symmetrize=False, verbose=True, converted_dlr_eps=None):
 
         self.timer = timer if timer is not None else Timer()
 
-        self.__setup_dlr_basis(beta, lamb, eps, dlr_symmetrize)
+        if dlr_symmetrize:
+            source_dlr_eps = eps
+            eps = _converted_dlr_eps(eps, converted_dlr_eps)
+            if is_root():
+                warn_symmetric_dlr_conversion(source_dlr_eps, eps)
+
+        self.__setup_dlr_basis(beta, lamb, eps, dlr_symmetrize=False)
+
+        if G_iaa is not None and dlr_symmetrize:
+            G_iaa = resample_dlr_imtime_data_to_tau_rel(
+                G_iaa, beta, lamb / beta, self.ito.get_itnodes(),
+                source_dlr_eps, source_dlr_symmetrize=True)
+
         self.__setup_ed_solver(beta, H_loc, fundamental_operators)
         self.__setup_ppsc_solver()
         self.__setup_initial_guess(G_iaa=G_iaa, eta=eta)
@@ -875,12 +891,35 @@ class Solver(object):
     @classmethod
     def __factory_from_dict__(cls, name, d):
         arg_keys = ['beta', 'lamb', 'eps', 'H_loc', 'fundamental_operators']
-        argv_keys = ['ntau', 'G_iaa', 'eta', 'verbose']
+        argv_keys = ['ntau', 'G_iaa', 'eta', 'dlr_symmetrize', 'verbose']
         verbose = d['verbose']
         d['verbose'] = False # -- Suppress printouts on reconstruction from dict
+        if 'dlr_symmetrize' not in d:
+            d['dlr_symmetrize'] = False
+        source_dlr_symmetrize = d['dlr_symmetrize']
+        source_dlr_eps = d['eps']
         ret = cls(*[ d[key] for key in arg_keys ],
                   **{ key : d[key] for key in argv_keys })
+
+        converted_state = None
+        if source_dlr_symmetrize:
+            converted_state = {
+                key: ret.__dict__[key]
+                for key in (
+                    'eps', 'dlr_symmetrize', 'dlr_rf', 'tau_i',
+                    'G0_iaa', 'G_iaa')}
+            if 'G0_xaa' in d:
+                converted_state['G0_xaa'] = ret.ito.vals2coefs(ret.G0_iaa)
+            for key in ('Sigma_iaa', 'g_iaa'):
+                if key in d:
+                    converted_state[key] = resample_dlr_imtime_data_to_tau_rel(
+                        d[key], ret.beta, ret.lamb / ret.beta,
+                        ret.ito.get_itnodes(), source_dlr_eps,
+                        source_dlr_symmetrize=True)
+
         ret.__dict__.update(d)
+        if converted_state is not None:
+            ret.__dict__.update(converted_state)
         ret.verbose = verbose
         return ret
     
