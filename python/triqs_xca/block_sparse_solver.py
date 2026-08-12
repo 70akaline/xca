@@ -1317,7 +1317,7 @@ class BlockSparseSolver(object):
 
     
     def __skip_keys(self):
-        return ['d', 'dysons', 'timer']
+        return ['d', 'dysons', '_ito', 'timer']
 
 
     def __reduce_to_dict__(self):
