@@ -22,6 +22,9 @@ def test_block_sparse_copy():
     S_copy = copy.deepcopy(S)
 
     assert(S_copy == S) # Check equality
+    assert S_copy.dysons is None
+    S_copy.solve_dyson(S_copy.Sigma, S_copy.eta)
+    assert len(S_copy.dysons) == len(S_copy.G0)
 
     # Check that the copy is a different object
     # with different attributes (not the same references)
