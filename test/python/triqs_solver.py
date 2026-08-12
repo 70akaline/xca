@@ -32,7 +32,8 @@ from triqs_xca.solver import Solver
 from triqs_xca.triqs_solver import TriqsSolver
 
 
-def test_triqs_solver_one_fermion(verbose):
+def test_triqs_solver_one_fermion(
+        verbose, dlr_symmetrize=False, order=1, maxiter=100):
     
     mu = 1/3
     beta = 10.0
@@ -44,20 +45,21 @@ def test_triqs_solver_one_fermion(verbose):
 
     lamb = beta * w_max
 
-    order = 1
-
     H_loc = -mu * c_dag('bl',0) * c('bl',0)
 
     # -- Solve using Triqs solver API
     
-    TS = TriqsSolver(beta=beta, gf_struct=[('bl', 1)], eps=eps, w_max=w_max)
+    TS = TriqsSolver(
+        beta=beta, gf_struct=[('bl', 1)], eps=eps, w_max=w_max,
+        dlr_symmetrize=dlr_symmetrize)
 
     for bidx, delta_tau in TS.Delta_tau:
         delta_w = make_gf_dlr_imfreq(delta_tau)
         delta_w << t**2 * inverse(iOmega_n - ek)
         delta_tau[:] = make_gf_dlr_imtime(delta_w)
     
-    TS.solve(h_int=H_loc, order=order, tol=1e-9)
+    TS.solve(
+        h_int=H_loc, order=order, tol=1e-9, maxiter=maxiter)
 
     print(TS.G_tau)
 
@@ -65,12 +67,14 @@ def test_triqs_solver_one_fermion(verbose):
 
     fundamental_operators = [ c('bl',i) for i in range(1) ]
 
-    S = Solver(beta, lamb, eps, H_loc, fundamental_operators, verbose=True)
+    S = Solver(
+        beta, lamb, eps, H_loc, fundamental_operators,
+        dlr_symmetrize=dlr_symmetrize, verbose=True)
 
     delta_iaa = t**2 * S.fd.free_greens(beta, np.array([[ek]]))
     S.set_hybridization(delta_iaa)
 
-    S.solve(order, tol=1e-9)
+    S.solve(order, tol=1e-9, maxiter=maxiter)
 
     g_iaa = S.calc_spgf(order)
 
@@ -104,3 +108,5 @@ def test_triqs_solver_one_fermion(verbose):
 if __name__ == '__main__':
 
     test_triqs_solver_one_fermion(verbose=False)
+    test_triqs_solver_one_fermion(
+        verbose=False, dlr_symmetrize=True, order=3, maxiter=0)
