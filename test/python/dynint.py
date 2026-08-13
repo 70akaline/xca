@@ -79,35 +79,58 @@ def test_dynint_one_fermion(
     Compare to ED reference solution.
 
     Note that the retarded interaction does not contribute to the
-    single particle Green's function diagrams (they are zero for all orders).
+    single particle Green's function diagrams (they are zero for all orders),
+    so the single particle Green's function only tests the pseudo particle
+    self-energy diagrams.
 
-    Thus, this only tests the pseudo particle self-energy diagrams.
+    The density-density susceptibility chi_nn(tau) = <T n(tau) n(0)>, on the other hand,
+    does get contributions from the retarded interaction at every order above the first,
+    and is evaluated here at the same order as the self-energy expansion.
+
+    Returns the maximal deviation from the ED reference of the single particle Green's
+    function and of chi_nn.
     """
+
+    from triqs.operators import n
 
     S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps)
 
     f_mesh = S.mesh_tau
-    b_mesh = MeshDLRImTime(beta=f_mesh.beta, statistic='Boson', eps=f_mesh.eps, w_max=f_mesh.w_max, symmetrize=False)
 
     S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=True)
 
-    g_tau_ed_0, chi_tau_ed_0 = get_ed_ref(eps0 - mu, 0.0, omega0, f_mesh, b_mesh, Nb_max=10)
-    g_tau_ed, chi_tau_ed = get_ed_ref(eps0 - mu, g, omega0, f_mesh, b_mesh, Nb_max=10)
+    chi_tau = S.eval_one_time_correlator(
+        S.G, max_order=order, ops_tau=[n('0', 0)], ops_0=[n('0', 0)])
+
+    # ED reference on the solver's imaginary time mesh, where both G_tau and chi_tau live
+    g_tau_ed_0, chi_tau_ed_0 = get_ed_ref(eps0 - mu, 0.0, omega0, f_mesh, f_mesh, Nb_max=10)
+    g_tau_ed, chi_tau_ed = get_ed_ref(eps0 - mu, g, omega0, f_mesh, f_mesh, Nb_max=10)
 
     if verbose:
         from triqs.plot.mpl_interface import oplot, plt
 
-        plt.figure(figsize=(6, 6))
-        subp = [1, 1, 1]
+        plt.figure(figsize=(6, 8))
+        subp = [2, 1, 1]
 
         plt.subplot(*subp); subp[-1] += 1
         oplot(make_gf_imtime(S.G_tau, n_tau=100).real, '-', label='xca')
         oplot(make_gf_imtime(g_tau_ed, n_tau=100).real, ':', label='ed')
         oplot(make_gf_imtime(g_tau_ed_0, n_tau=100).real, ':', label='ed (g=0)')
+        plt.ylabel(r'$G(\tau)$')
+
+        plt.subplot(*subp); subp[-1] += 1
+        oplot(chi_tau[0, 0].real, '-', label='xca')
+        oplot(chi_tau_ed[0, 0].real, ':', label='ed')
+        oplot(chi_tau_ed_0[0, 0].real, ':', label='ed (g=0)')
+        plt.ylabel(r'$\chi_{nn}(\tau)$')
+
+        plt.tight_layout()
         plt.show()
 
-    error = np.max(np.abs(S.G_tau['0'].data - g_tau_ed.data))
-    return error
+    g_error = np.max(np.abs(S.G_tau['0'].data - g_tau_ed.data))
+    chi_error = np.max(np.abs(chi_tau.data - chi_tau_ed.data))
+
+    return g_error, chi_error
 
 
 def test_dynint_chi(
@@ -204,35 +227,50 @@ def test_dynint_chi(
 
 def test_convergence_rate(verbose=False):
 
-    """ Test convergence rate of the dynamic interaction expansion 
-    by comparing to ED reference solution for a single fermionic level 
+    """ Test convergence rate of the dynamic interaction expansion
+    by comparing to ED reference solution for a single fermionic level
     coupled to a bosonic mode.
-     
-    At order = 1 we expect a convergence rate of 2 (error ~ g^4), and 
-    at order = 2 we expect a convergence rate of 3 (error ~ g^6)."""
 
-    errss = []
+    At order = 1 we expect a convergence rate of 2 (error ~ g^4), and
+    at order = 2 we expect a convergence rate of 3 (error ~ g^6).
+
+    The density-density susceptibility chi_nn, evaluated with the one time correlator api
+    at the same order as the self-energy expansion, converges one rate slower: order
+    instead of order + 1. The correlator expansion starts at the bare bubble, so
+    truncating it at max_order = m leaves a leading neglected vertex correction of
+    O(g^(2m)), while the self-energy at order m is accurate to O(g^(2(m+1))). Evaluating
+    chi_nn at max_order = order + 1 instead does recover the rate of the single particle
+    Green's function."""
+
+    g2s = np.logspace(-1.5, -0.5, 3)
     orders = [1, 2]
+
+    g_errss, chi_errss = [], []
     for order in orders:
-        g2s = np.logspace(-1.5, -0.5, 3)
-        errs = np.zeros_like(g2s)
+        g_errs = np.zeros_like(g2s)
+        chi_errs = np.zeros_like(g2s)
         for i, g2 in enumerate(g2s):
             g = np.sqrt(g2)
-            errs[i] = test_dynint_one_fermion(g=g, order=order)
-        errss.append(errs)
+            g_errs[i], chi_errs[i] = test_dynint_one_fermion(g=g, order=order)
+        g_errss.append(g_errs)
+        chi_errss.append(chi_errs)
+
+    def convergence_rate(errs):
+        return (np.log(errs[:-1] / errs[1:]) / np.log(g2s[:-1] / g2s[1:]))[0]
 
     if mpi.is_master_node():
         # Compute convergence rates
-        rates = []
-        for order, errs in zip(orders, errss):
-            rate = (np.log(errs[:-1] / errs[1:]) / np.log(g2s[:-1] / g2s[1:]))[0]
-            rates.append(rate)
-            print(f'Order {order} convergence rates: {rate}')
+        g_rates, chi_rates = [], []
+        for order, g_errs, chi_errs in zip(orders, g_errss, chi_errss):
+            g_rates.append(convergence_rate(g_errs))
+            chi_rates.append(convergence_rate(chi_errs))
+            print(f'Order {order} convergence rates: G={g_rates[-1]}, Chi={chi_rates[-1]}')
 
     if verbose and mpi.is_master_node():
         import matplotlib.pyplot as plt
-        for i, (order, errs) in enumerate(zip(orders, errss)):
-            plt.loglog(g2s, errs, 'o-', label=f'O{order}')
+        for i, (order, g_errs, chi_errs) in enumerate(zip(orders, g_errss, chi_errss)):
+            plt.loglog(g2s, g_errs, 'o-', color=f'C{i}', label=f'O{order} G')
+            plt.loglog(g2s, chi_errs, 's--', color=f'C{i}', label=f'O{order} Chi')
         plt.xlabel('$g^2$')
         plt.ylabel('Error')
         plt.legend(loc='best')
@@ -242,9 +280,12 @@ def test_convergence_rate(verbose=False):
 
     if mpi.is_master_node():
         # Test convergence rates
-        for order, rate in zip(orders, rates):
-            diff = np.abs(rate - (order + 1))
-            assert( diff < 0.2 ), f'Expected convergence rate of {order+1} for order {order}, but got {rate}, diff {diff}'
+        for label, rates, offset in [('G', g_rates, 1), ('Chi', chi_rates, 0)]:
+            for order, rate in zip(orders, rates):
+                expected = order + offset
+                diff = np.abs(rate - expected)
+                assert( diff < 0.2 ), \
+                    f'Expected {label} convergence rate of {expected} for order {order}, but got {rate}, diff {diff}'
 
 
 if __name__ == '__main__':
