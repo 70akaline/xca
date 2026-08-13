@@ -412,7 +412,7 @@ namespace triqs_xca::dense {
   }
 
   int DenseDiagramEvaluator::get_num_single_ptcle_gf_backbones(nda::array_const_view<int, 2> topology) {
-    CorrelatorBackbone backbone(topology, n);
+    CorrelatorBackbone backbone(topology, n, n_int);
     return static_cast<int>(backbone.fb_ix_max * backbone.o_ix_max * pow(hyb.poles.size(), backbone.m - 1));
   }
 
@@ -432,7 +432,7 @@ namespace triqs_xca::dense {
   }
 
   nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_single_ptcle_gf(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, int f_ix) {
-    CorrelatorBackbone backbone(topology, n);
+    CorrelatorBackbone backbone(topology, n, n_int);
     auto mu_ops  = Fset.Fs;
     auto kap_ops = Fset.F_dags;
 
@@ -445,9 +445,8 @@ namespace triqs_xca::dense {
     return eval_correlator(G_ppsc[0].data(), backbone, mu_ops, kap_ops, f_ix);
   }
 
-  nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_single_ptcle_gf(gf_vt G_ppsc, nda::array_const_view<int, 2> topology,
-                                                                         nda::array_const_view<int, 1> f_ix_vec) {
-    CorrelatorBackbone backbone(topology, n);
+  nda::array<dcomplex, 3> DenseDiagramEvaluator::compute_single_ptcle_gf(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec) {
+    CorrelatorBackbone backbone(topology, n, n_int);
     auto mu_ops  = Fset.Fs;
     auto kap_ops = Fset.F_dags;
 

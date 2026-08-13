@@ -19,22 +19,21 @@ using triqs_xca::atom_diag::ad_to_atom_prop;
 using triqs_xca::dense::DenseDiagramEvaluator;
 
 /**
- * Regression test for the missing n_int argument in
- * DenseDiagramEvaluator::compute_single_ptcle_gf().
+ * All overloads of DenseDiagramEvaluator::compute_single_ptcle_gf() sum over the same set
+ * of backbone flat indices, so they must give identical results in the presence of
+ * dynamical interactions as well.
  *
- * compute_single_ptcle_gf(G, topology) builds CorrelatorBackbone(topology, n, n_int)
- * whereas the flat-index overloads at dense_backbone.cpp:373 and :387 build
- * CorrelatorBackbone(topology, n), i.e. with n_int = 0. With n_int = 0 every vertex is
- * classified as fermionic in Backbone::get_parity(), so backbone diagrams in which an
- * internal line is a dynamical interaction (bosonic) line get the wrong permutation
- * parity.
+ * This pins down the number of interaction operators, n_int, being handed to the
+ * CorrelatorBackbone. With n_int = 0 every vertex is classified as fermionic in
+ * Backbone::get_parity(), so backbones whose internal line is a dynamical interaction
+ * (bosonic) line acquire the wrong permutation parity.
  *
- * Since all three overloads sum over exactly the same set of flat indices, they must give
- * identical results. The f_ix_vec overload is the one the Python solver uses for the MPI
- * distributed evaluation (block_sparse_solver.py: __eval_single_particle_greens_function_topology_loop).
- *
- * Commit 63e072e fixed the same omission at dense_backbone.cpp:358 and :413 but missed
- * these three sites.
+ * The flat-index overloads used to omit n_int (dense_backbone.cpp:353, :373 and :387;
+ * commit 63e072e fixed the omission at :358 and :413 but missed these). The error was
+ * confined to the components of the returned array that involve the interaction
+ * operators - the density-density correlator <T n(tau) n(0)> came out with a flipped sign
+ * - which the Python solver never sees because it slices those components away. The
+ * equivalent check at the Python level is test_dynint_chi in test/python/dynint.py.
  */
 
 namespace {
@@ -133,12 +132,8 @@ TEST(DenseDynint, spgf_flat_index_overloads_agree) {
   auto spgf_single = nda::make_regular(0 * spgf_all);
   for (int f_ix = 0; f_ix < n_backbones; ++f_ix) spgf_single += D.compute_single_ptcle_gf(m.G_ppsc, topology, f_ix);
 
-  // Report which components are affected. For this model the error sits entirely in the
-  // (n_hyb, n_hyb) component, i.e. in the density-density correlator <T n(tau) n(0)> built
-  // from the interaction operator, whose sign is flipped. The fermionic block is
-  // unaffected here, which is why the Python solver - which slices the interaction
-  // components away - does not see this bug. See test/python/dynint.py: test_dynint_chi
-  // for the same failure at the Python level.
+  // On failure, report which components disagree: the interaction components are the ones
+  // at risk, since only they can put a bosonic vertex on an internal line.
   for (int mu = 0; mu < D.n; ++mu) {
     for (int kap = 0; kap < D.n; ++kap) {
       double err = nda::max_element(nda::abs(spgf_all(_, mu, kap) - spgf_vec(_, mu, kap)));

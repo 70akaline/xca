@@ -129,17 +129,16 @@ def test_dynint_chi(
       B) directly, through compute_one_time_correlator(ops_tau=[O_i], ops_0=[O_j]).
 
     Both sum the same backbone diagrams over the same flat indices, so they must agree
-    topology by topology.
+    topology by topology. This pins down the number of interaction operators, n_int, being
+    handed to the CorrelatorBackbone: without it the interaction vertices on the internal
+    lines are counted as fermionic when the permutation parity is computed, and path A
+    comes out with the opposite sign for the topologies that carry an interaction line
+    (here the second order one, and two of the four at third order).
 
-    They do not: compute_single_ptcle_gf(G, topology, f_ix_vec) constructs its
-    CorrelatorBackbone without n_int (dense_backbone.cpp:387, likewise :373 and :353), so
-    the interaction vertices on the internal lines are counted as fermionic when the
-    permutation parity is computed, and path A comes out with the wrong sign for the
-    topologies that carry an interaction line. Path B passes n_int and is correct.
-
-    Note that the solver's own observables are shielded from this: eval_one_time_correlator
-    uses path B, and eval_single_particle_greens_function discards the interaction
-    components of path A.
+    Path A used to be wrong for that reason. It did not affect the solver's own observables
+    - eval_one_time_correlator uses path B, and eval_single_particle_greens_function
+    discards the interaction components of path A - so this check reaches past the solver
+    and calls the diagram evaluator directly.
     """
 
     from triqs.operators import n
