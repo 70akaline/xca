@@ -194,7 +194,7 @@ class BlockSparseSolver(object):
             # Split up Delta and dynint after compression
             # pole_weights contains both Delta and dynint coefficients
             n, m = Delta_dynint_tau['Delta'].target_shape
-            self.dynint_coeffs = pole_weights[:, n:, m:] # Second diagonal block
+            self.dynint_coeffs = np.ascontiguousarray(pole_weights[:, n:, m:]) # Second diagonal block
             pole_weights = pole_weights[:, :n, :m] # First diagonal block
 
         self.set_hybridization_poles_and_coefficients(poles, pole_weights)
