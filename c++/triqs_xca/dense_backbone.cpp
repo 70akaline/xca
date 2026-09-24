@@ -1,3 +1,6 @@
+#include <stdexcept>
+#include <string>
+
 #include <nda/nda.hpp>
 
 #include <cppdlr/dlr_imtime.hpp>
@@ -138,7 +141,7 @@ namespace triqs_xca::dense {
 
   triqs::gfs::block_gf<triqs::mesh::dlr_imtime> DenseDiagramEvaluator::compute_self_energy_by_pairs(gf_vt G_ppsc,
                                                                                                     nda::array_const_view<int, 2> topology) {
-    Backbone backbone(topology, n);
+    Backbone backbone(topology, n, n_int);
     eval_self_energy_by_pairs(G_ppsc[0].data(), backbone);
     auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
     reset();
@@ -147,7 +150,7 @@ namespace triqs_xca::dense {
 
   triqs::gfs::block_gf<triqs::mesh::dlr_imtime>
   DenseDiagramEvaluator::compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, int f_ix) {
-    Backbone backbone(topology, n);
+    Backbone backbone(topology, n, n_int);
     eval_self_energy_fixed_index_pair(G_ppsc[0].data(), backbone, f_ix);
     auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
     reset();
@@ -156,7 +159,7 @@ namespace triqs_xca::dense {
 
   triqs::gfs::block_gf<triqs::mesh::dlr_imtime>
   DenseDiagramEvaluator::compute_self_energy_by_pairs(gf_vt G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec) {
-    Backbone backbone(topology, n);
+    Backbone backbone(topology, n, n_int);
     for (int f_ix : f_ix_vec) eval_self_energy_fixed_index_pair(G_ppsc[0].data(), backbone, f_ix);
     auto sigma_gf = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, this->Sigma);
     reset();
@@ -474,7 +477,11 @@ namespace triqs_xca::dense {
 
     // Check Hilbert space dimension.
     assert(N == ad.get_full_hilbert_space_dim());
-    assert(ad.n_subspaces() == 1);
+
+    // The operator matrices are read from subspace 0 only
+    if (ad.n_subspaces() != 1)
+      throw std::invalid_argument("compute_one_time_correlator: requires an atom_diag with a single subspace, got " + std::to_string(ad.n_subspaces())
+                                  + ". Build it with an empty list of conserved operators.");
 
     auto U = ad.get_unitary_matrix(0);
 

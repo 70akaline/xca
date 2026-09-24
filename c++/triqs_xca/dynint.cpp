@@ -1,5 +1,8 @@
 
 
+#include <stdexcept>
+#include <string>
+
 #include "triqs_xca/dynint.hpp"
 
 
@@ -54,8 +57,11 @@ namespace triqs_xca::dynint {
         Fs_ext(range(0, n_hyb), _, _) = Fs;
         Fdags_ext(range(0, n_hyb), _, _) = Fdags;
 
-        // Check atom diag subspaces.
-        assert( ad.n_subspaces() == 1 );
+        // Check atom diag subspaces, the interaction operators are read from subspace 0 only
+        if (ad.n_subspaces() != 1)
+            throw std::invalid_argument("get_operators_and_interactions_dense: dynamical interactions require an atom_diag "
+                                        "with a single subspace, got " + std::to_string(ad.n_subspaces())
+                                        + ". Build it with an empty list of conserved operators.");
 
         auto U_mat = ad.get_unitary_matrix(0);
 
