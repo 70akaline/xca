@@ -38,13 +38,10 @@ namespace triqs_xca::atom_diag {
       return op_mat;
     }
 
-    template <bool IsComplex>
-    std::tuple<BlockOpSymQuartet, nda::vector<int>> get_operators_impl(const triqs_atom_diag_t<IsComplex> &ad,
-                                                                       nda::array_const_view<dcomplex, 3> hyb_coeffs) {
+    template <bool IsComplex> BlockOpSymSets get_operator_sym_sets_impl(const triqs_atom_diag_t<IsComplex> &ad, int n) {
 
       // Find like rows of c_connection (resp. cdag_connection), which correspond with annihilation (resp. creation) operators that have the same
       // sparsity pattern
-      int n = hyb_coeffs.extent(1);
       nda::vector<long> sym_set_labels(n);
       sym_set_labels = 0;
       int counter    = 0;
@@ -183,8 +180,16 @@ namespace triqs_xca::atom_diag {
         F_sym_vec.emplace_back(F_block_inds(i, cppdlr::_), c_blocks[i]);
         F_dag_sym_vec.emplace_back(F_dag_block_inds(i, cppdlr::_), cdag_blocks[i]);
       }
-      BlockOpSymQuartet Fq(F_sym_vec, F_dag_sym_vec, hyb_coeffs, sym_set_labels);
-      return std::make_tuple(Fq, sym_set_labels);
+      return BlockOpSymSets{std::move(F_sym_vec), std::move(F_dag_sym_vec), std::move(sym_set_labels)};
+    }
+
+    template <bool IsComplex>
+    std::tuple<BlockOpSymQuartet, nda::vector<int>> get_operators_impl(const triqs_atom_diag_t<IsComplex> &ad,
+                                                                       nda::array_const_view<dcomplex, 3> hyb_coeffs) {
+      // the orbital count is taken from the coefficients, which may cover only the first n fundamental operators
+      auto sets = get_operator_sym_sets_impl(ad, static_cast<int>(hyb_coeffs.extent(1)));
+      BlockOpSymQuartet Fq(sets.Fs, sets.F_dags, hyb_coeffs, sets.sym_set_labels);
+      return std::make_tuple(Fq, sets.sym_set_labels);
     }
 
     template <bool IsComplex>
@@ -351,6 +356,25 @@ namespace triqs_xca::atom_diag {
     triqs::mesh::dlr_imtime tau_mesh(beta, triqs::mesh::Fermion, Lambda / beta, eps, false);
     for (int i = 0; i < ap.get_num_block_cols(); ++i) { gf_blocks[i] = triqs::gfs::gf<triqs::mesh::dlr_imtime>(tau_mesh, ap.get_block(i)); }
     return {gf_blocks};
+  }
+
+  namespace {
+    // n indexes ad.c_connection, so an out-of-range value has to be caught here
+    void check_sym_set_orbital_count(int n, long n_fops) {
+      if (n < 0 || n > n_fops)
+        throw std::invalid_argument("get_operator_sym_sets: asked for " + std::to_string(n) + " orbitals, but the atom_diag has "
+                                    + std::to_string(n_fops) + " fundamental operators");
+    }
+  } // namespace
+
+  BlockOpSymSets get_operator_sym_sets(const triqs_atom_diag_t<true> &ad, int n) {
+    check_sym_set_orbital_count(n, ad.get_fops().size());
+    return get_operator_sym_sets_impl(ad, n);
+  }
+
+  BlockOpSymSets get_operator_sym_sets(const triqs_atom_diag_t<false> &ad, int n) {
+    check_sym_set_orbital_count(n, ad.get_fops().size());
+    return get_operator_sym_sets_impl(ad, n);
   }
 
   std::tuple<BlockOpSymQuartet, nda::vector<int>> get_operators(const triqs_atom_diag_t<true> &ad, nda::array_const_view<dcomplex, 3> hyb_coeffs) {

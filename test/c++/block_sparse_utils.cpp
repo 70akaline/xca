@@ -270,21 +270,34 @@ triqs::atom_diag::atom_diag<true> two_band_atom_diag_helper() {
   return ad;
 }
 
+namespace {
+
+  // Hamiltonian shared by spin_flip_atom_diag_helper and its single-subspace twin
+  triqs::operators::many_body_operator_complex spin_flip_hamiltonian(int norb, double mu, double U, double V,
+                                                                     triqs::atom_diag::fundamental_operator_set &fop_set) {
+    using triqs::operators::c;
+    using triqs::operators::c_dag;
+    using triqs::operators::many_body_operator_complex;
+    using triqs::operators::n;
+
+    many_body_operator_complex H;
+    for (int i = 0; i < norb; i++) {
+      H += U * n("up", i) * n("do", i) + mu * (n("up", i) + n("do", i)) + V * (c_dag("up", i) * c("do", i) + c_dag("do", i) * c("up", i));
+      fop_set.insert("do", i);
+    }
+    for (int i = 0; i < norb; i++) { fop_set.insert("up", i); }
+    return H;
+  }
+
+} // namespace
+
 triqs::atom_diag::atom_diag<true> spin_flip_atom_diag_helper(int norb, bool use_particle_number_sym, double mu, double U, double V) {
   // Helper function for setting up the spin-flip model, whose Hamiltonian couples the two spin species on each orbital
-  using triqs::operators::c;
-  using triqs::operators::c_dag;
   using triqs::operators::many_body_operator_complex;
   using triqs::operators::n;
 
-  many_body_operator_complex H;
   triqs::atom_diag::fundamental_operator_set fop_set;
-
-  for (int i = 0; i < norb; i++) {
-    H += U * n("up", i) * n("do", i) + mu * (n("up", i) + n("do", i)) + V * (c_dag("up", i) * c("do", i) + c_dag("do", i) * c("up", i));
-    fop_set.insert("do", i);
-  }
-  for (int i = 0; i < norb; i++) { fop_set.insert("up", i); }
+  auto H = spin_flip_hamiltonian(norb, mu, U, V, fop_set);
 
   // create atom_diag object, either from the particle number as a quantum number or by autopartitioning
   if (use_particle_number_sym) {
@@ -294,6 +307,82 @@ triqs::atom_diag::atom_diag<true> spin_flip_atom_diag_helper(int norb, bool use_
     return triqs::atom_diag::atom_diag<true>(H, fop_set, sym_ops);
   }
   return triqs::atom_diag::atom_diag<true>(H, fop_set);
+}
+
+triqs::atom_diag::atom_diag<true> spin_flip_atom_diag_helper_single_subspace(int norb, double mu, double U, double V) {
+  // The sym_ops = {} twin of the above, for use as a dense dynamical-interaction reference
+  using triqs::operators::many_body_operator_complex;
+
+  triqs::atom_diag::fundamental_operator_set fop_set;
+  auto H = spin_flip_hamiltonian(norb, mu, U, V, fop_set);
+  return triqs::atom_diag::atom_diag<true>(H, fop_set, std::vector<many_body_operator_complex>{});
+}
+
+triqs::atom_diag::atom_diag<true> sz_resolved_atom_diag_helper(int norb, bool partition, double mu, double U, double t) {
+  // Spinful model with N_up and N_do separately conserved, so that S^+ and S^- are valid single-target operators
+  using triqs::operators::c;
+  using triqs::operators::c_dag;
+  using triqs::operators::many_body_operator_complex;
+  using triqs::operators::n;
+
+  many_body_operator_complex H, Nup, Ndo;
+  triqs::atom_diag::fundamental_operator_set fop_set;
+
+  for (int i = 0; i < norb; i++) { fop_set.insert("do", i); }
+  for (int i = 0; i < norb; i++) { fop_set.insert("up", i); }
+
+  for (int i = 0; i < norb; i++) {
+    H += U * n("up", i) * n("do", i) + mu * (n("up", i) + n("do", i));
+    Nup += n("up", i);
+    Ndo += n("do", i);
+  }
+  // Spin-conserving hopping, in place of the spin-flip term, so that S_z stays a good quantum number
+  for (int i = 0; i + 1 < norb; i++) {
+    H += t * (c_dag("up", i) * c("up", i + 1) + c_dag("up", i + 1) * c("up", i) + c_dag("do", i) * c("do", i + 1) + c_dag("do", i + 1) * c("do", i));
+  }
+
+  std::vector<many_body_operator_complex> sym_ops;
+  if (partition) sym_ops = {Nup, Ndo};
+  return triqs::atom_diag::atom_diag<true>(H, fop_set, sym_ops);
+}
+
+triqs::atom_diag::atom_diag<true> unequal_sym_set_model(bool partition) {
+  // Two symmetry sets of unequal size: {c_A0, c_A1} of size 2 and {c_B0} of size 1
+  using triqs::operators::c;
+  using triqs::operators::c_dag;
+  using triqs::operators::many_body_operator_complex;
+  using triqs::operators::n;
+
+  many_body_operator_complex NA = n("A", 0) + n("A", 1);
+  many_body_operator_complex NB = n("B", 0);
+
+  many_body_operator_complex H;
+  H += 0.3 * NA - 0.7 * NB;
+  H += 0.4 * (c_dag("A", 0) * c("A", 1) + c_dag("A", 1) * c("A", 0));
+  H += 1.1 * n("A", 0) * n("A", 1);
+  H += 0.9 * n("A", 0) * n("B", 0) + 0.5 * n("A", 1) * n("B", 0);
+
+  triqs::atom_diag::fundamental_operator_set fop_set;
+  fop_set.insert("A", 0);
+  fop_set.insert("A", 1);
+  fop_set.insert("B", 0);
+
+  std::vector<many_body_operator_complex> sym_ops;
+  if (partition) sym_ops = {NA, NB};
+  return {H, fop_set, sym_ops};
+}
+
+nda::array<dcomplex, 3> sym_set_diagonal_hyb(nda::vector_const_view<int> labels, int p) {
+  int norb        = static_cast<int>(labels.size());
+  auto hyb_coeffs = nda::zeros<dcomplex>(p, norb, norb);
+  for (int l = 0; l < p; ++l) {
+    for (int i = 0; i < norb; ++i) {
+      for (int j = 0; j < norb; ++j) {
+        if (labels(i) == labels(j)) hyb_coeffs(l, i, j) = 0.3 + 0.1 * l + 0.2 * i - 0.05 * j;
+      }
+    }
+  }
+  return hyb_coeffs;
 }
 
 std::tuple<nda::array<dcomplex, 3>, nda::array<dcomplex, 3>, nda::array<dcomplex, 3>> two_band_dense_helper(double beta, double Lambda, double eps) {
