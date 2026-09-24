@@ -31,6 +31,26 @@ namespace {
                                   + std::to_string(n) + " orbital indices");
   }
 
+  // Validate the coefficients of the Fq-only constructor against the quartet and return n, the atom_diag constructors build both from the
+  // same array and need no check
+  long check_fq_only_coeffs(nda::array_const_view<dcomplex, 3> hyb_coeffs, nda::vector_const_view<double> hyb_poles,
+                            BlockOpSymQuartet const &Fq) {
+    long n = nda::sum(Fq.sym_set_sizes);
+    long p = hyb_poles.size();
+    // all three extents, a wrong pole count is silently reinterpreted by the reshape in coefs2vals
+    if (hyb_coeffs.extent(0) != p || hyb_coeffs.extent(1) != n || hyb_coeffs.extent(2) != n) {
+      throw std::invalid_argument("DiagramEvaluator: hyb_coeffs must have shape (p, n, n) with p = hyb_poles.size() = "
+                                  + std::to_string(p) + " and n = sum(Fq.sym_set_sizes) = " + std::to_string(n) + ", got ("
+                                  + std::to_string(hyb_coeffs.extent(0)) + ", " + std::to_string(hyb_coeffs.extent(1)) + ", "
+                                  + std::to_string(hyb_coeffs.extent(2)) + ")");
+    }
+    check_sym_set_block_diagonal(hyb_coeffs, Fq.sym_set_labels, "DiagramEvaluator");
+    return n;
+  }
+
+  // the leading index kap of Tkaps runs within one symmetry set, so the largest set is the bound rather than n
+  long max_sym_set_size(BlockOpSymQuartet const &Fq) { return nda::max_element(Fq.sym_set_sizes); }
+
   // largest block dimension over all symmetry sets, Fs[0] alone underestimates it when set 0 misses the largest subspace
   int max_block_dim(BlockOpSymQuartet const &Fq) {
     int N = 0;
@@ -60,7 +80,7 @@ DiagramEvaluator::DiagramEvaluator(double beta, double Lambda, double eps,
      Sigma({}, {}),
      beta(beta),
      r(itops.rank()),
-     n(nda::sum(Fq.sym_set_sizes)), // number of spin-orbitals
+     n(check_fq_only_coeffs(hyb_coeffs, hyb_poles, Fq)), // number of spin-orbitals; also validates hyb_coeffs
      // n_int is the constructor parameter here, the member of the same name is not yet initialized
      n_hyb((check_n_int(n_int, nda::sum(Fq.sym_set_sizes)), nda::sum(Fq.sym_set_sizes) - n_int)),
      n_int(n_int),
@@ -71,7 +91,7 @@ DiagramEvaluator::DiagramEvaluator(double beta, double Lambda, double eps,
      T(nda::zeros<dcomplex>(r, Nmax, Nmax)),
      U(nda::zeros<dcomplex>(r, Nmax, Nmax)),
      GKt(nda::zeros<dcomplex>(r, Nmax, Nmax)),
-     Tkaps(nda::zeros<dcomplex>(n, r, Nmax, Nmax)), // Largest memory footprint, speeding up multiply_left_vertex_and_right_zero_vertex
+     Tkaps(nda::zeros<dcomplex>(max_sym_set_size(Fq), r, Nmax, Nmax)), // kap runs within one symmetry set, not over all n
      Tmu(nda::zeros<dcomplex>(r, Nmax, Nmax))
      {}
 
@@ -99,7 +119,7 @@ DiagramEvaluator::DiagramEvaluator(
      T(nda::zeros<dcomplex>(r, Nmax, Nmax)),
      U(nda::zeros<dcomplex>(r, Nmax, Nmax)),
      GKt(nda::zeros<dcomplex>(r, Nmax, Nmax)),
-     Tkaps(nda::zeros<dcomplex>(n, r, Nmax, Nmax)), // Largest memory footprint, speeding up multiply_left_vertex_and_right_zero_vertex
+     Tkaps(nda::zeros<dcomplex>(max_sym_set_size(Fq), r, Nmax, Nmax)), // kap runs within one symmetry set, not over all n
      Tmu(nda::zeros<dcomplex>(r, Nmax, Nmax))
      {}
 
@@ -142,7 +162,7 @@ DiagramEvaluator::DiagramEvaluator(
      T(nda::zeros<dcomplex>(r, Nmax, Nmax)),
      U(nda::zeros<dcomplex>(r, Nmax, Nmax)),
      GKt(nda::zeros<dcomplex>(r, Nmax, Nmax)),
-     Tkaps(nda::zeros<dcomplex>(n, r, Nmax, Nmax)), // Largest memory footprint, speeding up multiply_left_vertex_and_right_zero_vertex
+     Tkaps(nda::zeros<dcomplex>(max_sym_set_size(Fq), r, Nmax, Nmax)), // kap runs within one symmetry set, not over all n
      Tmu(nda::zeros<dcomplex>(r, Nmax, Nmax))
      {}
 
@@ -323,7 +343,12 @@ void DiagramEvaluator::find_path_self_energy(BlockDiagOpFun &Gt, Backbone &backb
       // -----------------------------------------------------------------------------------
       // second half: vertex connected to zero and above
 
-      for (int p_mu = 0; p_mu < q; p_mu++) { // loop over symmetry sets on the vertex connected to vertex 0?
+      for (int p_mu = 0; p_mu < q; p_mu++) { // loop over symmetry sets on the vertex connected to vertex 0
+
+        // Only the diagonal (p_kap, p_mu) pairs contribute, since every coefficient array reaching an evaluator has passed
+        // check_sym_set_block_diagonal. The cross-set remainder below sym_set_coupling_tol is not harmless: its T_out need not return to
+        // block b_ix and would be accumulated into a block of the wrong shape, so it is skipped here rather than by the absolute guard below
+        if (p_mu != p_kap) continue;
 
         // ind_path setup 2
 
@@ -602,14 +627,16 @@ nda::array<dcomplex, 3> DiagramEvaluator::eval_correlator(BlockDiagOpFun &Gt, Co
 
   auto is_path_incomplete = [&](int ip) { return (ip == -1 || Gt.get_zero_block_index(ip) == -1); };
 
-  bool incomplete_path = false;
-  
   right_inds = -1;
   left_inds  = -1;
 
   // -- Right-hand side of diagram, with vertices on [tau, 0]
   
   for (int b_ix = 0; b_ix < Gt.get_num_block_cols(); ++b_ix) { // loop over blocks of right-hand side of diagram
+
+    // Each block loop owns its flag: the walk is empty when vct0 == 1 here and when vct0 == 2m-1 in the [beta, tau] loop, and a shared
+    // flag would carry the previous loop's last block into the next one, dropping the whole [beta, tau] side
+    bool incomplete_path = false;
 
     // ind_path setup (right)
     
@@ -652,7 +679,9 @@ nda::array<dcomplex, 3> DiagramEvaluator::eval_correlator(BlockDiagOpFun &Gt, Co
   // -- Left-hand side of diagram, with vertices on [beta, tau]
 
   for (int b_ix = 0; b_ix < Gt.get_num_block_cols(); ++b_ix) {
-    
+
+    bool incomplete_path = false; // per block; see the [tau, 0] loop above
+
     // ind_path setup (left)
     
     int ip = b_ix;
@@ -724,15 +753,14 @@ nda::array<dcomplex, 3> DiagramEvaluator::eval_correlator(BlockDiagOpFun &Gt, Co
 
       for (int t = 0; t < r; ++t) Tmuop_b(t, _, _) = matmul(left_b(t, _, _), matmul(O_mu_b, right_b(t, _, _)));
       
+      // the block index of the kap operator is fixed by the end of the path, which is_path_incomplete(ip) above has checked
+      int const c_ix = ind_path_end(2);
       for (int kap = 0; kap < kap_ops.size(); ++kap) {
-        for (int c_ix = 0; c_ix < Gt.get_num_block_cols(); ++c_ix) { // Can this loop be removed using c_ix = ind_path_end(2) ?
-          if (c_ix == ind_path_end(2) && kap_ops[kap].get_block_index(c_ix) == b_ix) {
+        if (kap_ops[kap].get_block_index(c_ix) == b_ix) {
 
-            nda::array_const_view<dcomplex, 2> O_kap_b = kap_ops[kap].get_block(c_ix);
+          nda::array_const_view<dcomplex, 2> O_kap_b = kap_ops[kap].get_block(c_ix);
 
-            for (int t = 0; t < r; ++t) correlator(t, mu, kap) += trace(matmul(Tmuop_b(t, _, _), O_kap_b));
-            
-          }
+          for (int t = 0; t < r; ++t) correlator(t, mu, kap) += trace(matmul(Tmuop_b(t, _, _), O_kap_b));
         }
       }
       

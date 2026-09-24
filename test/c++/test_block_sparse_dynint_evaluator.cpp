@@ -573,9 +573,9 @@ TEST(BlockSparseDynintEvaluator, one_time_correlator_matches_dense_with_dynamica
       return o.str();
     }() + (can_see_it ? " (red driver)" : " (parity-blind control)"));
 
-    // eval_correlator silently loses contributions for a topology pairing vertex 0 with vertex 2m-1, which is never connected and
-    // never reached by the solver, so keep this test away from it
-    ASSERT_NE(topology(0, 1), two_m - 1) << "eval_correlator is independently broken for vct0 == 2m-1";
+    // vertex 0 pairing with vertex 2m-1 is covered by SparsityInvariance.correlator_keeps_the_beta_tau_side_when_vertex_zero_pairs_with_the_last_vertex
+    // on a purely fermionic model, so keep this test off that case
+    ASSERT_NE(topology(0, 1), two_m - 1) << "covered by the sparsity-invariance correlator test, not here";
 
     int nb = D.get_num_single_ptcle_gf_backbones(topology);
     ASSERT_EQ(nb, D_dense.get_num_single_ptcle_gf_backbones(topology)) << "the two evaluators do not enumerate the same backbones";
