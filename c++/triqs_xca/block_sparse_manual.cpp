@@ -146,7 +146,8 @@ namespace triqs_xca::block_sparse {
             if (fb == 1) {
               Sigma(t, _, _) += hyb(t, lam, kap) * matmul(F2, matmul(Gt(t, _, _), F1));
             } else {
-              Sigma(t, _, _) += hyb_refl(t, lam, kap) * matmul(F2, matmul(Gt(t, _, _), F1));
+              // backward: F1 = F_dag(kap) and F2 = F(lam), so the daggered index kap comes first
+              Sigma(t, _, _) += hyb_refl(t, kap, lam) * matmul(F2, matmul(Gt(t, _, _), F1));
             }
           }
         }
@@ -731,7 +732,8 @@ namespace triqs_xca::block_sparse {
           if (forward) {
             Tmu(t, _, _) += hyb(t, mu, kap) * Tkaps(kap, t, _, _);
           } else {
-            Tmu(t, _, _) += hyb_refl(t, mu, kap) * Tkaps(kap, t, _, _);
+            // backward: the daggered index kap comes first
+            Tmu(t, _, _) += hyb_refl(t, kap, mu) * Tkaps(kap, t, _, _);
           }
         }
       }

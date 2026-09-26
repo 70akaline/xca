@@ -206,7 +206,10 @@ namespace triqs_xca::dense {
     for (int mu = 0; mu < n; mu++) {
       Tmu = 0;
       for (int kap = 0; kap < n; kap++) {
-        nda::array_const_view<dcomplex, 1> hyb_t = hyb_too(_, mu, kap);
+        // The backward branch transposes the coefficient index, as the barred operators of the interior lines do: forward is
+        // F_dag(mu) ... F(kap) with the daggered index first, backward is F(mu) ... F_dag(kap) and needs (kap, mu). Reading (mu, kap) on
+        // both branches breaks unitary invariance under a complex basis rotation, which the legacy path avoids by transposing at construction
+        nda::array_const_view<dcomplex, 1> hyb_t = is_forward ? hyb_too(_, mu, kap) : hyb_too(_, kap, mu);
 
         // set the orbital indices of the vertex connected to zero
         // and compute the fermionic permutation parity of the resulting diagram.
