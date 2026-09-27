@@ -9,6 +9,7 @@
 #include "triqs_xca/hyb.hpp"
 #include "triqs_xca/dynint.hpp"
 #include "triqs_xca/dense_backbone.hpp"
+#include "operator_statistics.hpp"
 
 namespace triqs_xca::dense {
 
@@ -497,31 +498,9 @@ namespace triqs_xca::dense {
     // Figure out whether ops_tau and ops_0 are fermionic or bosonic.
     // Require that all operators have the same statistics
 
-    nda::array<bool, 2> is_fermionic_ops(ops_tau.size(), ops_0.size());
-
-    for (auto [i, op_tau] : itertools::enumerate(ops_tau)) {
-      for (auto [j, op_0] : itertools::enumerate(ops_0)) {
-
-        // test bosonic property: [A, B] = 0
-        is_fermionic_ops(i, j) = !(op_tau * op_0 - op_0 * op_tau).is_zero();
-
-        /*
-        std::cout << "i, j = " << i << ", " << j 
-          << ", op_tau = " << op_tau << ", op_0 = " << op_0
-          << ", is_fermionic_ops(i, j) = " << is_fermionic_ops(i, j) << "\n";
-        */
-      }
-    }
-
-    // Test that all operators have the same statistics
-
-    for (auto el : is_fermionic_ops) {
-      if (el != is_fermionic_ops(0, 0)) {
-        throw std::runtime_error("compute_one_time_correlator: All operators must have the same statistics (either all fermionic or all bosonic).");
-      }
-    }
-
-    bool is_fermionic = is_fermionic_ops(0, 0); // Pass on statistics to diagram evaluator
+    // The statistics is the fermion parity of the operators, not whether they commute: a commutator test calls (S+, S-) fermionic
+    // since [S+, S-] = 2 Sz != 0, see operator_statistics.hpp
+    bool is_fermionic = correlator_statistics(ops_tau, ops_0, "compute_one_time_correlator");
 
     for (auto f_ix : f_ix_vec) { correlator += eval_correlator(G_ppsc[0].data(), backbone, mu_ops, kap_ops, f_ix, is_fermionic); }
 

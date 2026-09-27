@@ -11,6 +11,7 @@
 #include "triqs_xca/dynint.hpp"
 
 #include "triqs_xca/hyb.hpp"
+#include "operator_statistics.hpp"
 
 namespace triqs_xca::block_sparse {
 
@@ -946,22 +947,8 @@ nda::array<dcomplex, 3> DiagramEvaluator::compute_one_time_correlator(
     triqs::atom_diag::atom_diag<isComplex> const &ad,
     nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec){
 
-  nda::array<bool, 2> is_fermionic_ops(ops_tau.size(), ops_0.size());
-
-  for (auto [i, op_tau] : itertools::enumerate(ops_tau)) {
-    for (auto [j, op_0] : itertools::enumerate(ops_0)) {
-      // test bosonic property: [A, B] = 0
-      is_fermionic_ops(i, j) = !(op_tau * op_0 - op_0 * op_tau).is_zero();
-    }
-  }
-
-  // Test that all operators have the same statistics
-  for ( auto el : is_fermionic_ops ) {
-    if (el != is_fermionic_ops(0, 0))
-      throw std::runtime_error("compute_one_time_correlator: All operators must have the same statistics (either all fermionic or all bosonic).");
-  }
-
-  bool is_fermionic = is_fermionic_ops(0, 0); // Pass on statistics to diagram evaluator
+  // the statistics is the fermion parity of the operators, not whether they commute, see operator_statistics.hpp
+  bool is_fermionic = correlator_statistics(ops_tau, ops_0, "compute_one_time_correlator");
 
   BlockDiagOpFun Gt(G_ppsc);
   CorrelatorBackbone backbone(topology, n, n_int);

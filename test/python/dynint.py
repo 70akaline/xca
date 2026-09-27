@@ -138,7 +138,7 @@ def test_dynint_one_fermion(
 
 def test_dynint_chi(
         beta=2.1, eps0=-0.1, g=0.4, omega0=1., w_max=2.0, eps=1e-12,
-        order=2, verbose=False):
+        order=2, verbose=False, conserved_operators=[]):
 
     """ Density-density susceptibility chi_nn(tau) = <T n(tau) n(0)> of the same model.
 
@@ -170,8 +170,13 @@ def test_dynint_chi(
     from triqs.operators import n
     from triqs_xca.diag import all_connected_pairings
 
-    S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps)
+    S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps,
+                        conserved_operators=conserved_operators)
     S.solve(max_order=order, spgf_max_order=order, maxiter=8, tol=1e-8, verbose=False, hyb_comp=True)
+
+    # Path A reads component (n_hyb, n_hyb) of the single-particle correlator, which the block-sparse
+    # spgf of shape (r, n_hyb, n_hyb) does not have, so the A/B cross-check stays dense-only
+    two_path = S.use_dense_solver
 
     f_mesh = S.mesh_tau
 
@@ -193,7 +198,7 @@ def test_dynint_chi(
     op = n('0', 0)
 
     errors = []
-    for o in range(1, order + 1):
+    for o in range(1, order + 1) if two_path else []:
         for sign, topology in all_connected_pairings(o):
             topology = np.array(topology, dtype=np.int32)
 
@@ -223,12 +228,15 @@ def test_dynint_chi(
     assert chi_error < 0.1 * g**2, \
         f'chi_nn deviates from the ED reference by {chi_error:2.2E}'
 
-    assert np.max(errors) < 1e-10, \
-        f'chi_nn from compute_single_ptcle_gf and from compute_one_time_correlator ' \
-        f'disagree by {np.max(errors):2.2E}'
+    if two_path:
+        assert np.max(errors) < 1e-10, \
+            f'chi_nn from compute_single_ptcle_gf and from compute_one_time_correlator ' \
+            f'disagree by {np.max(errors):2.2E}'
+    else:
+        assert not errors, 'the A/B cross-check must not run on the block-sparse path'
 
 
-def test_convergence_rate(verbose=False):
+def test_convergence_rate(verbose=False, conserved_operators=[], orders=[1, 2]):
 
     """ Test convergence rate of the dynamic interaction expansion
     by comparing to ED reference solution for a single fermionic level
@@ -246,7 +254,6 @@ def test_convergence_rate(verbose=False):
     Green's function."""
 
     g2s = np.logspace(-1.5, -0.5, 3)
-    orders = [1, 2]
 
     g_errss, chi_errss = [], []
     for order in orders:
@@ -254,7 +261,8 @@ def test_convergence_rate(verbose=False):
         chi_errs = np.zeros_like(g2s)
         for i, g2 in enumerate(g2s):
             g = np.sqrt(g2)
-            g_errs[i], chi_errs[i] = test_dynint_one_fermion(g=g, order=order)
+            g_errs[i], chi_errs[i] = test_dynint_one_fermion(
+                g=g, order=order, conserved_operators=conserved_operators)
         g_errss.append(g_errs)
         chi_errss.append(chi_errs)
 
@@ -289,6 +297,72 @@ def test_convergence_rate(verbose=False):
                 diff = np.abs(rate - expected)
                 assert( diff < 0.2 ), \
                     f'Expected {label} convergence rate of {expected} for order {order}, but got {rate}, diff {diff}'
+
+    # return the rates for test_dynint_block_sparse_convergence, empty off the master node
+    if not mpi.is_master_node():
+        return {'G': {}, 'Chi': {}}
+    return {'G': dict(zip(orders, g_rates)), 'Chi': dict(zip(orders, chi_rates))}
+
+
+def test_dynint_block_sparse_convergence(verbose=False):
+
+    """ The block-sparse expansion must converge at the same rate as the dense one.
+
+    Order 2 only, comparing the measured convergence rates of the two evaluator paths rather than
+    their absolute values. """
+
+    # order 2 only, order 1 exercises no crossing topology
+    rates_dense = test_convergence_rate(conserved_operators=[], orders=[2])
+    rates_bs    = test_convergence_rate(conserved_operators='automatic', orders=[2])
+
+    if verbose:
+        print(f'dense rates: {rates_dense}')
+        print(f'bs    rates: {rates_bs}')
+
+    for key in ('G', 'Chi'):
+        for order in rates_dense[key]:
+            d, b = rates_dense[key][order], rates_bs[key][order]
+            assert abs(b - d) < 1e-6, \
+                f'{key} convergence rate at order {order} differs: dense {d:.6f} vs block-sparse {b:.6f}'
+
+
+def test_dynint_h5_roundtrip(verbose=False):
+
+    """ A solved dynint solver must survive h5 write/read and copy, on both evaluator paths.
+
+    The restored object is also re-solved and must give the same G_tau, since __eq__ compares the
+    stored dictionary and cannot see the evaluator, which is rebuilt from scratch. """
+
+    import copy, tempfile, os
+    from h5 import HDFArchive
+
+    for conserved_operators in ([], 'automatic'):
+        label = 'dense' if conserved_operators == [] else 'block-sparse'
+
+        S, mu = make_solver(conserved_operators=conserved_operators)
+        S.solve(max_order=2, spgf_max_order=1, maxiter=4, tol=1e-8, verbose=False, hyb_comp=False)
+        G_ref = S.G_tau['0'].data.copy()
+
+        assert S.has_dynamic_interactions, f'{label}: vacuous test, no dynamical interaction is set'
+
+        filename = os.path.join(tempfile.mkdtemp(), 'dynint_roundtrip.h5')
+        with HDFArchive(filename, 'w') as A: A['S'] = S
+        with HDFArchive(filename, 'r') as A: S_h5 = A['S']
+
+        S_copy = copy.deepcopy(S)
+
+        for restored, how in ((S_h5, 'h5'), (S_copy, 'deepcopy')):
+            assert S == restored, f'{label}: solver does not compare equal after {how}'
+            assert restored.has_dynamic_interactions, f'{label}: dynamical interactions lost in {how}'
+            assert len(restored.dynint_ops) == len(S.dynint_ops), f'{label}: dynint_ops lost in {how}'
+
+            # the evaluator is in __skip_keys and has to be rebuilt by the restored object
+            restored.solve(max_order=2, spgf_max_order=1, maxiter=4, tol=1e-8, verbose=False, hyb_comp=False)
+            err = np.max(np.abs(restored.G_tau['0'].data - G_ref))
+            assert err < 1e-12, f'{label}: re-solving after {how} changed G_tau by {err:2.2E}'
+
+        if verbose:
+            print(f'{label}: h5 and deepcopy round-trip OK')
 
 
 def test_dynint_block_sparse(verbose=False):
@@ -325,7 +399,48 @@ def test_dynint_block_sparse(verbose=False):
         f'block-sparse and dense chi errors differ: {chi_bs:2.6E} vs {chi_dense:2.6E}'
 
 
+def test_dynint_block_sparse_hyb_comp(verbose=False):
+
+    """ Dense and block-sparse must agree with hybridization compression on. Currently failing.
+
+    At order 3 with hyb_comp=True the G errors of the two paths differ by 2.9e-09, while they agree to
+    6e-16 with compression off. Delta_tau is zero in this model, so the compression acts on the
+    dynamical interaction alone and does not depend on the atom_diag partition. Comparing the dense
+    evaluator's own paired and unpaired self-energy routines at order 3 gives a 4.75% discrepancy with
+    compression on, so the suspect is reverse_hyb_line_zero() reading the reflected hybridization,
+    which is KMS-consistent for an exact DLR representation but not necessarily for a fitted one.
+    Until this is resolved test_dynint_block_sparse runs with hyb_comp=False. """
+
+    kwargs = dict(order=3, hyb_comp=True, verbose=False)
+
+    g_dense, chi_dense = test_dynint_one_fermion(conserved_operators=[], **kwargs)
+    g_bs, chi_bs       = test_dynint_one_fermion(conserved_operators='automatic', **kwargs)
+
+    if verbose:
+        print(f'dense: g_error = {g_dense:2.3E}  chi_error = {chi_dense:2.3E}')
+        print(f'bs   : g_error = {g_bs:2.3E}  chi_error = {chi_bs:2.3E}')
+
+    # the same comparison with compression off must pass
+    g_d0, chi_d0 = test_dynint_one_fermion(conserved_operators=[], order=3, hyb_comp=False, verbose=False)
+    g_b0, chi_b0 = test_dynint_one_fermion(conserved_operators='automatic', order=3, hyb_comp=False, verbose=False)
+    assert abs(g_b0 - g_d0) < 1e-12, \
+        f'premise broken: dense and block-sparse already disagree at order 3 WITHOUT compression ' \
+        f'({g_b0:2.3E} vs {g_d0:2.3E}), so this is not a compression problem'
+
+    assert abs(g_bs - g_dense) < 1e-12, \
+        f'with hyb_comp=True at order 3, block-sparse and dense G errors ' \
+        f'differ by {abs(g_bs - g_dense):2.3E} ({g_bs:2.3E} vs {g_dense:2.3E}); the same comparison ' \
+        f'with hyb_comp=False agrees to {abs(g_b0 - g_d0):2.3E}'
+    assert abs(chi_bs - chi_dense) < 1e-12, \
+        f'with hyb_comp=True at order 3, chi errors differ by {abs(chi_bs - chi_dense):2.3E}'
+
+
 if __name__ == '__main__':
     test_convergence_rate(verbose=False)
     test_dynint_chi(verbose=False)
+    test_dynint_chi(verbose=False, conserved_operators='automatic')
     test_dynint_block_sparse(verbose=True)
+    test_dynint_h5_roundtrip(verbose=True)
+    test_dynint_block_sparse_convergence(verbose=True)
+    # currently failing, keep it last so that everything above still runs
+    test_dynint_block_sparse_hyb_comp(verbose=True)
