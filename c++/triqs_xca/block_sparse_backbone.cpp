@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <stdexcept>
+#include <string>
 #include <iostream>
 
 #include <itertools/itertools.hpp>
@@ -5,6 +8,7 @@
 #include "triqs_xca/atom_diag_utils.hpp"
 
 #include "triqs_xca/block_sparse_backbone.hpp"
+#include "triqs_xca/dynint.hpp"
 
 #include "triqs_xca/hyb.hpp"
 
@@ -18,10 +22,36 @@ using nda::linalg::matmul;
 
 using triqs_xca::atom_diag::get_operators;
 
+namespace {
+
+  // an out-of-range n_int would give a negative n_hyb
+  void check_n_int(int n_int, long n) {
+    if (n_int < 0 || n_int > n)
+      throw std::invalid_argument("DiagramEvaluator: n_int = " + std::to_string(n_int) + " is out of range for a quartet with "
+                                  + std::to_string(n) + " orbital indices");
+  }
+
+  // largest block dimension over all symmetry sets, Fs[0] alone underestimates it when set 0 misses the largest subspace
+  int max_block_dim(BlockOpSymQuartet const &Fq) {
+    int N = 0;
+    for (auto const &F : Fq.Fs) N = std::max(N, nda::max_element(F.get_block_sizes()));
+    for (auto const &F : Fq.F_dags) N = std::max(N, nda::max_element(F.get_block_sizes()));
+    return N;
+  }
+
+  // largest invariant-subspace dimension, i.e. the largest block of the pseudo-particle propagator
+  template <bool isComplex>
+  int max_subspace_dim(triqs::atom_diag::atom_diag<isComplex> const &ad) {
+    auto const dims = ad.get_subspace_dims();
+    return dims.empty() ? 0 : *std::max_element(dims.begin(), dims.end());
+  }
+
+} // namespace
+
 DiagramEvaluator::DiagramEvaluator(double beta, double Lambda, double eps, 
                                    nda::vector_const_view<double> hyb_poles, 
                                    nda::array_const_view<dcomplex, 3> hyb_coeffs,
-                                   BlockOpSymQuartet &Fq)
+                                   BlockOpSymQuartet &Fq, int n_int)
    : 
      tau_mesh(triqs::mesh::dlr_imtime(beta, triqs::mesh::Fermion, Lambda / beta, eps, false)),
      itops(tau_mesh.dlr_it()),
@@ -31,9 +61,11 @@ DiagramEvaluator::DiagramEvaluator(double beta, double Lambda, double eps,
      beta(beta),
      r(itops.rank()),
      n(nda::sum(Fq.sym_set_sizes)), // number of spin-orbitals
+     // n_int is the constructor parameter here, the member of the same name is not yet initialized
+     n_hyb((check_n_int(n_int, nda::sum(Fq.sym_set_sizes)), nda::sum(Fq.sym_set_sizes) - n_int)),
+     n_int(n_int),
      q(nda::max_element(Fq.sym_set_labels) + 1),
-     //Nmax(Gt.get_max_block_size()), // get from Fq instead
-     Nmax(nda::max_element(Fq.Fs[0].get_block_sizes())), // Possibly dangerous if Fs[0] has no block in the larges sector..?
+     Nmax(max_block_dim(Fq)),
      hyb(tau_mesh, hyb_poles, hyb_coeffs),
      // allocate arrays
      T(nda::zeros<dcomplex>(r, Nmax, Nmax)),
@@ -58,9 +90,10 @@ DiagramEvaluator::DiagramEvaluator(
      beta(tau_mesh.beta()),
      r(itops.rank()),
      n(ad.get_fops().size()), // number of fermion flavours (spin-orbitals)
+     n_hyb(ad.get_fops().size()),
+     n_int(0), // no dynamical interactions in this constructor
      q(nda::max_element(Fq.sym_set_labels) + 1),
-     //Nmax(Gt.get_max_block_size()),
-     Nmax(nda::max_element(Fq.Fs[0].get_block_sizes())), // Possibly dangerous if Fs[0] has no block in the larges sector..?
+     Nmax(max_subspace_dim(ad)),
      hyb(tau_mesh, hyb_poles, hyb_coeffs),
      // allocate arrays
      T(nda::zeros<dcomplex>(r, Nmax, Nmax)),
@@ -81,6 +114,53 @@ template DiagramEvaluator::DiagramEvaluator(
   nda::array_const_view<dcomplex, 3> hyb_coeffs, 
   triqs::mesh::dlr_imtime tau_mesh,
   triqs::atom_diag::atom_diag<false> const &ad);  
+
+template<bool isComplex>
+DiagramEvaluator::DiagramEvaluator(
+  nda::vector_const_view<double> hyb_poles,
+  nda::array_const_view<dcomplex, 3> hyb_coeffs,
+  triqs::mesh::dlr_imtime tau_mesh,
+  triqs::atom_diag::atom_diag<isComplex> const &ad,
+  std::vector<triqs::operators::many_body_operator_real> const &dynint_ops,
+  nda::array_const_view<dcomplex, 3> dynint_coeffs)
+   :
+     tau_mesh(tau_mesh),
+     itops(tau_mesh.dlr_it()),
+     dlr_it(itops.get_itnodes()),
+     Fq(std::get<0>(dynint::get_operators_and_interactions(ad, hyb_coeffs, dynint_coeffs, dynint_ops))),
+     Sigma({}, {}),
+     beta(tau_mesh.beta()),
+     r(itops.rank()),
+     n(ad.get_fops().size() + dynint_ops.size()), // the extended flavour space
+     n_hyb(ad.get_fops().size()),
+     n_int(dynint_ops.size()),
+     q(nda::max_element(Fq.sym_set_labels) + 1),
+     Nmax(max_subspace_dim(ad)),
+     // no refl_sign argument: block-sparse keeps +1.0 and applies the backward-line sign explicitly
+     hyb(tau_mesh, hyb_poles, dynint::get_extended_coefficients(hyb_coeffs, dynint_coeffs)),
+     // allocate arrays
+     T(nda::zeros<dcomplex>(r, Nmax, Nmax)),
+     U(nda::zeros<dcomplex>(r, Nmax, Nmax)),
+     GKt(nda::zeros<dcomplex>(r, Nmax, Nmax)),
+     Tkaps(nda::zeros<dcomplex>(n, r, Nmax, Nmax)), // Largest memory footprint, speeding up multiply_left_vertex_and_right_zero_vertex
+     Tmu(nda::zeros<dcomplex>(r, Nmax, Nmax))
+     {}
+
+template DiagramEvaluator::DiagramEvaluator(
+  nda::vector_const_view<double> hyb_poles,
+  nda::array_const_view<dcomplex, 3> hyb_coeffs,
+  triqs::mesh::dlr_imtime tau_mesh,
+  triqs::atom_diag::atom_diag<true> const &ad,
+  std::vector<triqs::operators::many_body_operator_real> const &dynint_ops,
+  nda::array_const_view<dcomplex, 3> dynint_coeffs);
+
+template DiagramEvaluator::DiagramEvaluator(
+  nda::vector_const_view<double> hyb_poles,
+  nda::array_const_view<dcomplex, 3> hyb_coeffs,
+  triqs::mesh::dlr_imtime tau_mesh,
+  triqs::atom_diag::atom_diag<false> const &ad,
+  std::vector<triqs::operators::many_body_operator_real> const &dynint_ops,
+  nda::array_const_view<dcomplex, 3> dynint_coeffs);
 
 // ----------- Private routines for any diagram ==========
 
@@ -706,7 +786,8 @@ int DiagramEvaluator::get_num_single_ptcle_gf_backbones(nda::array_const_view<in
 // Order the operators by orbital index, not by symmetry set, since they index the external legs of the single-particle Green's function
 std::vector<BlockOp> DiagramEvaluator::setup_mu_ops_for_single_ptcle_gf() {
   std::vector<BlockOp> mu_ops;
-  for (int o_ix = 0; o_ix < n; ++o_ix) {
+  // the interaction flavours are the last n_int orbital indices and are not external legs of the single-particle Green's function
+  for (int o_ix = 0; o_ix < n_hyb; ++o_ix) {
     auto &F = Fq.Fs[Fq.sym_set_labels(o_ix)];
     int i   = static_cast<int>(Fq.sym_set_inds(o_ix));
     std::vector<nda::array<dcomplex, 2>> mu_blocks;
@@ -726,7 +807,7 @@ std::vector<BlockOp> DiagramEvaluator::setup_mu_ops_for_single_ptcle_gf() {
 
 std::vector<BlockOp> DiagramEvaluator::setup_kap_ops_for_single_ptcle_gf() {
   std::vector<BlockOp> kap_ops;
-  for (int o_ix = 0; o_ix < n; ++o_ix) {
+  for (int o_ix = 0; o_ix < n_hyb; ++o_ix) {
     auto &F_dag = Fq.F_dags[Fq.sym_set_labels(o_ix)];
     int i       = static_cast<int>(Fq.sym_set_inds(o_ix));
     std::vector<nda::array<dcomplex, 2>> kap_blocks;

@@ -73,7 +73,9 @@ class DiagramEvaluator {
   public:
   double beta;                         // inverse temperature
   int r;                               // rank of the DLR imaginary time object
-  int n;                               // number of orbitals
+  int n;                               // number of orbitals, n_hyb + n_int
+  int n_hyb;                           // number of hybridization (fermionic) flavours
+  int n_int;                           // number of dynamical-interaction flavours
   int q;                               // number of symmetry sets
   int Nmax;                            // maximum block size in the Green's function
   C2PY_IGNORE hyb::Hybridization hyb; // Hybridization object containing hyb and related information
@@ -147,6 +149,26 @@ class DiagramEvaluator {
     triqs::mesh::dlr_imtime tau_mesh, triqs::atom_diag::atom_diag<isComplex> const &ad);
 
   /**
+   * @brief Constructor for DiagramEvaluator with dynamical interactions
+   *
+   * @details The interaction operators extend the flavour space as the orbital indices [n_hyb, n_hyb + n_int), grouped into their own
+   * symmetry sets, and the coefficients are extended block-diagonally. hyb_coeffs must cover every fundamental operator of ad.
+   *
+   * @param[in] hyb_poles hybridization poles, shared with the dynamical interaction
+   * @param[in] hyb_coeffs hybridization function coefficients, shape (p, n_hyb, n_hyb)
+   * @param[in] tau_mesh TRIQS imaginary time DLR mesh
+   * @param[in] ad atom_diag object with Hamiltonian and field operators
+   * @param[in] dynint_ops the n_int dynamical-interaction operators
+   * @param[in] dynint_coeffs dynamical-interaction coefficients, shape (p, n_int, n_int)
+   */
+  template<bool isComplex>
+  DiagramEvaluator(
+    nda::vector_const_view<double> hyb_poles, nda::array_const_view<dcomplex, 3> hyb_coeffs,
+    triqs::mesh::dlr_imtime tau_mesh, triqs::atom_diag::atom_diag<isComplex> const &ad,
+    std::vector<triqs::operators::many_body_operator_real> const &dynint_ops,
+    nda::array_const_view<dcomplex, 3> dynint_coeffs);
+
+  /**
    * @brief Old constructor for DiagramEvaluator
    * @param[in] beta inverse temperature
    * @param[in] Lambda DLR imaginary time cutoff
@@ -154,12 +176,13 @@ class DiagramEvaluator {
    * @param[in] hyb hybridization function at imaginary time nodes
    * @param[in] Gt Green's function at imaginary time nodes
    * @param[in] Fset BlockOpSymQuartet (cre/ann operators with and without bars)
+   * @param[in] n_int number of dynamical-interaction flavours, the last n_int orbital indices of the quartet
    */
   C2PY_IGNORE DiagramEvaluator(
     double beta, double Lambda, double eps, 
     nda::vector_const_view<double> hyb_poles, 
     nda::array_const_view<dcomplex, 3> hyb_coeffs,
-    BlockOpSymQuartet &Fq);
+    BlockOpSymQuartet &Fq, int n_int = 0);
 
   virtual ~DiagramEvaluator() = default;
 };

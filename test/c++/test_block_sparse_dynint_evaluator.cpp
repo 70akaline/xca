@@ -1,0 +1,429 @@
+#include <algorithm>
+
+#include <gtest/gtest.h>
+
+#include <triqs/atom_diag/atom_diag.hpp>
+#include <triqs/operators/many_body_operator.hpp>
+
+#include <triqs_xca/atom_diag_utils.hpp>
+#include <triqs_xca/block_sparse.hpp>
+#include <triqs_xca/block_sparse_backbone.hpp>
+#include <triqs_xca/dense_backbone.hpp>
+#include <triqs_xca/dynint.hpp>
+#include <triqs_xca/topology.hpp>
+
+#include "block_sparse_utils.hpp"
+#include "parallel_atom_diag_check.hpp"
+
+using cppdlr::build_dlr_rf;
+using cppdlr::imtime_ops;
+using nda::dcomplex;
+
+using triqs::operators::many_body_operator_real;
+using triqs::operators::n;
+
+using triqs_xca::atom_diag::ad_to_atom_prop;
+using triqs_xca::atom_diag::get_operators;
+using triqs_xca::atom_diag::get_tensor_in_atom_diag_subspace;
+using triqs_xca::block_sparse::BlockDiagOpFun;
+using triqs_xca::block_sparse::BlockOpSymQuartet;
+using triqs_xca::block_sparse::DiagramEvaluator;
+using triqs_xca::dense::DenseDiagramEvaluator;
+using triqs_xca::dynint::get_extended_coefficients;
+using triqs_xca::dynint::get_operators_and_interactions;
+
+/**
+ * @file test_block_sparse_dynint_evaluator.cpp
+ *
+ * @brief Tests of the block-sparse DiagramEvaluator with dynamical interactions: the constructors, n / n_hyb / n_int and Nmax
+ *
+ * @details The self-energy is compared to the dense evaluator with dynamical interactions, which runs on the single-subspace twin of the
+ * partitioned atom_diag, with the two eigenbases bridged by get_tensor_in_atom_diag_subspace(). The comparison on the crossing topology
+ * requires n_int to reach every Backbone constructed in block_sparse_backbone.cpp, since the permutation parity otherwise treats the
+ * interaction line as fermionic, while the non-crossing topologies are insensitive to this and pin the rest of the construction.
+ */
+
+namespace {
+
+  // tolerance for the comparison with the dense reference, the measured agreement is ~1e-16
+  constexpr double sigma_tol = 1.0e-13;
+
+  constexpr double beta = 2.0, Lambda = 40.0, eps = 1.0e-10;
+  constexpr int p_poles = 2;
+
+  struct DynintModel {
+    triqs::atom_diag::atom_diag<true> ad;      // partitioned: the block-sparse side
+    triqs::atom_diag::atom_diag<true> ad_flat; // the sym_ops = {} twin: the dense side
+    nda::vector<double> hyb_poles;
+    nda::array<dcomplex, 3> hyb_coeffs;
+    nda::array<dcomplex, 3> dynint_coeffs;
+    std::vector<many_body_operator_real> dynint_ops;
+  };
+
+  /**
+   * @brief unequal_sym_set_model and its single-subspace twin, plus n_int density interactions
+   *
+   * @details The symmetry sets have unequal sizes {2, 1} and the largest subspace has dimension 2, so the Nmax tests are not vacuous.
+   */
+  DynintModel dynint_model(int n_int) {
+    auto ad       = unequal_sym_set_model(true);
+    auto ad_flat  = unequal_sym_set_model(false);
+    int n_hyb     = static_cast<int>(ad.get_fops().size());
+    auto labels_f = std::get<1>(get_operators(ad, nda::zeros<dcomplex>(p_poles, n_hyb, n_hyb)));
+    auto hyb      = sym_set_diagonal_hyb(labels_f, p_poles);
+
+    std::vector<many_body_operator_real> ops;
+    if (n_int > 0) ops.emplace_back(n("A", 0));
+    // n_A0 and n_B0 have different connection rows and land in two singleton dynint sets
+    if (n_int > 1) ops.emplace_back(n("B", 0));
+    EXPECT_EQ(static_cast<int>(ops.size()), n_int) << "dynint_model only knows two interaction operators";
+
+    // l- and i-dependent, so that a wrong pole or interaction flavour shows up
+    auto d = nda::zeros<dcomplex>(p_poles, n_int, n_int);
+    for (int l = 0; l < p_poles; ++l)
+      for (int i = 0; i < n_int; ++i) d(l, i, i) = 0.61 - 0.07 * l + 0.05 * i;
+
+    nda::vector<double> hyb_poles = {1.3, -0.8};
+    return {ad, ad_flat, hyb_poles, hyb, d, ops};
+  }
+
+  /// max over blocks of |Sigma_bs(b) - Sigma_dense projected onto subspace b|, and max|Sigma_dense|.
+  std::pair<double, double> compare_sigma_with_dense(BlockDiagOpFun &Sigma, triqs::gfs::block_gf<triqs::mesh::dlr_imtime> const &Sigma_dense,
+                                                     triqs::atom_diag::atom_diag<true> const &ad) {
+    double err = 0.0, scale = 0.0;
+    for (int b = 0; b < Sigma.get_num_block_cols(); ++b) {
+      SCOPED_TRACE("block " + std::to_string(b));
+      auto ref = get_tensor_in_atom_diag_subspace(Sigma_dense[0].data(), b, ad);
+      err      = std::max(err, nda::max_element(nda::abs(Sigma.get_block(b) - ref)));
+      scale    = std::max(scale, nda::max_element(nda::abs(ref)));
+    }
+    return {err, scale};
+  }
+
+  /// Same quartet with symmetry set s moved to position 0
+  BlockOpSymQuartet permute_set_to_front(BlockOpSymQuartet const &Fq, long s, nda::array_const_view<dcomplex, 3> coeffs) {
+    long nsets = nda::max_element(Fq.sym_set_labels) + 1;
+    std::vector<long> order{s};
+    for (long i = 0; i < nsets; ++i)
+      if (i != s) order.push_back(i);
+    std::vector<long> pos(nsets);
+    for (long i = 0; i < nsets; ++i) pos[order[i]] = i;
+
+    std::vector<triqs_xca::block_sparse::BlockOpSymSet> Fs, F_dags;
+    for (long i = 0; i < nsets; ++i) {
+      Fs.push_back(Fq.Fs[order[i]]);
+      F_dags.push_back(Fq.F_dags[order[i]]);
+    }
+    auto labels = nda::vector<long>(Fq.sym_set_labels.size());
+    for (long i = 0; i < Fq.sym_set_labels.size(); ++i) labels(i) = pos[Fq.sym_set_labels(i)];
+    return BlockOpSymQuartet(Fs, F_dags, coeffs, labels);
+  }
+
+  int max_subspace_dim(triqs::atom_diag::atom_diag<true> const &ad) {
+    auto d = ad.get_subspace_dims();
+    return *std::max_element(d.begin(), d.end());
+  }
+
+} // namespace
+
+/**
+ * @brief Compare the self-energy on the crossing topology to the dense evaluator with dynamical interactions
+ */
+TEST(BlockSparseDynintEvaluator, self_energy_matches_dense_with_dynamical_interactions) {
+
+  auto m = dynint_model(/*n_int=*/1);
+  ASSERT_NO_FATAL_FAILURE(assert_parallel_atom_diags(m.ad, m.ad_flat));
+
+  // only a crossing topology exposes the parity error
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  ASSERT_EQ(triqs_xca::topology::topology_parity(topology), -1) << "vacuous test: topology is not crossing";
+
+  int n_hyb = static_cast<int>(m.ad.get_fops().size());
+  int n_int = static_cast<int>(m.dynint_ops.size());
+
+  auto itops = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt    = ad_to_atom_prop(m.ad, beta, itops);
+
+  auto Fq  = std::get<0>(get_operators_and_interactions(m.ad, m.hyb_coeffs, m.dynint_coeffs, m.dynint_ops));
+  auto ext = get_extended_coefficients(m.hyb_coeffs, m.dynint_coeffs);
+
+  DiagramEvaluator D(beta, Lambda, eps, m.hyb_poles, ext, Fq, n_int);
+  ASSERT_EQ(D.n_hyb, n_hyb);
+  ASSERT_EQ(D.n_int, n_int);
+  ASSERT_EQ(D.n, n_hyb + n_int);
+
+  // check that some backbones carry the interaction operator on the internal line, which does not hold at order 1
+  auto Fq_ferm = std::get<0>(get_operators(m.ad, m.hyb_coeffs));
+  DiagramEvaluator D_ferm(beta, Lambda, eps, m.hyb_poles, m.hyb_coeffs, Fq_ferm);
+  ASSERT_GT(D.get_num_self_energy_backbones(topology), D_ferm.get_num_self_energy_backbones(topology))
+     << "vacuous test: no backbone carries the interaction operator";
+
+  auto Sigma = BlockDiagOpFun(D.compute_self_energy(Gt, topology));
+
+  // dense reference on the single-subspace twin
+  auto G_flat = ad_to_atom_prop(m.ad_flat, beta, Lambda, eps);
+  DenseDiagramEvaluator D_dense(m.hyb_poles, m.hyb_coeffs, G_flat[0].mesh(), m.ad_flat, m.dynint_ops, m.dynint_coeffs);
+  ASSERT_EQ(D_dense.n_hyb, n_hyb);
+  ASSERT_EQ(D_dense.n_int, n_int);
+  auto Sigma_dense = D_dense.compute_self_energy(G_flat, topology);
+
+  auto [err, scale] = compare_sigma_with_dense(Sigma, Sigma_dense, m.ad);
+
+  // the comparison is absolute, so require a non-negligible self-energy
+  ASSERT_GT(scale, 0.1) << "vacuous test: the self-energy is too small for an absolute tolerance";
+
+  EXPECT_LE(err, sigma_tol) << "max|Sigma_dense| = " << scale << ", max|bs - dense| = " << err
+                            << " -- the interaction line is being given fermionic parity";
+}
+
+/**
+ * @brief Check the comparison harness without interaction operators, where the block-sparse and the dense evaluator must agree
+ */
+TEST(BlockSparseDynintEvaluator, no_dynamical_interaction_matches_dense) {
+
+  auto m = dynint_model(/*n_int=*/0);
+  ASSERT_NO_FATAL_FAILURE(assert_parallel_atom_diags(m.ad, m.ad_flat));
+
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  auto itops                  = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt                     = ad_to_atom_prop(m.ad, beta, itops);
+
+  auto Fq  = std::get<0>(get_operators_and_interactions(m.ad, m.hyb_coeffs, nda::zeros<dcomplex>(p_poles, 0, 0), {}));
+  auto ext = get_extended_coefficients(m.hyb_coeffs, nda::zeros<dcomplex>(p_poles, 0, 0));
+  DiagramEvaluator D(beta, Lambda, eps, m.hyb_poles, ext, Fq, /*n_int=*/0);
+  auto Sigma = BlockDiagOpFun(D.compute_self_energy(Gt, topology));
+
+  auto G_flat = ad_to_atom_prop(m.ad_flat, beta, Lambda, eps);
+  DenseDiagramEvaluator D_dense(m.hyb_poles, m.hyb_coeffs, G_flat[0].mesh(), m.ad_flat);
+  auto Sigma_dense = D_dense.compute_self_energy(G_flat, topology);
+
+  auto [err, scale] = compare_sigma_with_dense(Sigma, Sigma_dense, m.ad);
+  ASSERT_GT(scale, 0.01) << "vacuous test: the self-energy is zero"; // measured 0.134
+  EXPECT_LE(err, sigma_tol) << "max|bs - dense| = " << err;
+}
+
+/**
+ * @brief Compare the self-energy on the non-crossing topologies, which are insensitive to the parity of the interaction line
+ */
+TEST(BlockSparseDynintEvaluator, self_energy_matches_dense_on_non_crossing_topologies) {
+
+  auto m = dynint_model(/*n_int=*/1);
+  ASSERT_NO_FATAL_FAILURE(assert_parallel_atom_diags(m.ad, m.ad_flat));
+  int n_int = static_cast<int>(m.dynint_ops.size());
+
+  auto itops  = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt     = ad_to_atom_prop(m.ad, beta, itops);
+  auto Fq     = std::get<0>(get_operators_and_interactions(m.ad, m.hyb_coeffs, m.dynint_coeffs, m.dynint_ops));
+  auto ext    = get_extended_coefficients(m.hyb_coeffs, m.dynint_coeffs);
+  auto G_flat = ad_to_atom_prop(m.ad_flat, beta, Lambda, eps);
+
+  DiagramEvaluator D(beta, Lambda, eps, m.hyb_poles, ext, Fq, n_int);
+  DenseDiagramEvaluator D_dense(m.hyb_poles, m.hyb_coeffs, G_flat[0].mesh(), m.ad_flat, m.dynint_ops, m.dynint_coeffs);
+
+  for (auto topology : {nda::array<int, 2>{{0, 1}}, nda::array<int, 2>{{0, 3}, {1, 2}}}) {
+    SCOPED_TRACE("topology " + [&] {
+      std::ostringstream o;
+      o << topology;
+      return o.str();
+    }());
+    ASSERT_EQ(triqs_xca::topology::topology_parity(topology), 1) << "this test is about non-crossing topologies";
+
+    auto Sigma        = BlockDiagOpFun(D.compute_self_energy(Gt, topology));
+    auto Sigma_dense  = D_dense.compute_self_energy(G_flat, topology);
+    auto [err, scale] = compare_sigma_with_dense(Sigma, Sigma_dense, m.ad);
+    ASSERT_GT(scale, 0.01) << "vacuous test: the self-energy is zero"; // measured 2.68 and 0.68
+    EXPECT_LE(err, sigma_tol) << "max|bs - dense| = " << err;
+  }
+}
+
+/**
+ * @brief Check the atom_diag constructor with dynamical interactions
+ *
+ * @details hyb_coeffs must cover every fundamental operator of the atom_diag, which is stricter than get_operators().
+ */
+TEST(BlockSparseDynintEvaluator, dynint_constructor_contract) {
+
+  auto m    = dynint_model(/*n_int=*/2); // two interaction flavours, in two singleton dynint sets
+  int n_hyb = static_cast<int>(m.ad.get_fops().size());
+  int n_int = static_cast<int>(m.dynint_ops.size());
+
+  auto G = ad_to_atom_prop(m.ad, beta, Lambda, eps);
+  DiagramEvaluator D(m.hyb_poles, m.hyb_coeffs, G[0].mesh(), m.ad, m.dynint_ops, m.dynint_coeffs);
+
+  EXPECT_EQ(D.n_hyb, n_hyb);
+  EXPECT_EQ(D.n_int, n_int);
+  EXPECT_EQ(D.n, n_hyb + n_int);
+  ASSERT_GT(n_int, 0) << "vacuous test: no interaction operator";
+
+  // the evaluator built from the quartet must give the same Sigma exactly
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  auto Fq                     = std::get<0>(get_operators_and_interactions(m.ad, m.hyb_coeffs, m.dynint_coeffs, m.dynint_ops));
+  auto ext                    = get_extended_coefficients(m.hyb_coeffs, m.dynint_coeffs);
+  EXPECT_EQ(D.q, static_cast<int>(nda::max_element(Fq.sym_set_labels) + 1));
+
+  DiagramEvaluator D_fq(beta, Lambda, eps, m.hyb_poles, ext, Fq, n_int);
+  auto itops = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt    = ad_to_atom_prop(m.ad, beta, itops);
+
+  auto Sa = BlockDiagOpFun(D.compute_self_energy(Gt, topology));
+  auto Sb = BlockDiagOpFun(D_fq.compute_self_energy(Gt, topology));
+  for (int b = 0; b < Sa.get_num_block_cols(); ++b) EXPECT_EQ(nda::max_element(nda::abs(Sa.get_block(b) - Sb.get_block(b))), 0.0) << "block " << b;
+
+  // match the message, other std::invalid_argument checks sit earlier in the same routine
+  auto short_hyb = nda::zeros<dcomplex>(p_poles, n_hyb - 1, n_hyb - 1);
+  try {
+    DiagramEvaluator D_bad(m.hyb_poles, short_hyb, G[0].mesh(), m.ad, m.dynint_ops, m.dynint_coeffs);
+    (void)D_bad;
+    FAIL() << "expected std::invalid_argument for a hyb_coeffs that does not cover every fundamental operator";
+  } catch (std::invalid_argument const &e) { EXPECT_NE(std::string(e.what()).find("fundamental operators"), std::string::npos) << e.what(); }
+}
+
+/**
+ * @brief Check that the constructor with empty dynint_ops reproduces the plain constructor exactly
+ *
+ * @details The empty coefficient array has to have shape (p, 0, 0), a default-constructed (0, 0, 0) array is rejected by the shared-pole-count
+ * check.
+ */
+TEST(BlockSparseDynintEvaluator, empty_dynint_ops_reproduce_the_plain_constructor) {
+
+  auto m                      = dynint_model(/*n_int=*/0);
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  auto G                      = ad_to_atom_prop(m.ad, beta, Lambda, eps);
+
+  DiagramEvaluator D0(m.hyb_poles, m.hyb_coeffs, G[0].mesh(), m.ad);
+  DiagramEvaluator D1(m.hyb_poles, m.hyb_coeffs, G[0].mesh(), m.ad, {}, nda::zeros<dcomplex>(p_poles, 0, 0));
+
+  EXPECT_EQ(D1.n, D0.n);
+  EXPECT_EQ(D1.n_hyb, D0.n_hyb);
+  EXPECT_EQ(D1.n_int, 0);
+  EXPECT_EQ(D1.q, D0.q);
+  EXPECT_EQ(D1.Nmax, D0.Nmax);
+
+  auto itops = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt    = ad_to_atom_prop(m.ad, beta, itops);
+  auto S0    = BlockDiagOpFun(D0.compute_self_energy(Gt, topology));
+  auto S1    = BlockDiagOpFun(D1.compute_self_energy(Gt, topology));
+
+  double scale = 0.0;
+  for (int b = 0; b < S0.get_num_block_cols(); ++b) {
+    scale = std::max(scale, nda::max_element(nda::abs(S0.get_block(b))));
+    EXPECT_EQ(nda::max_element(nda::abs(S0.get_block(b) - S1.get_block(b))), 0.0)
+       << "block " << b << ": with no interaction operators the two constructors must be bit-identical";
+  }
+  ASSERT_GT(scale, 0.01) << "vacuous test: the self-energy is zero"; // measured 0.134
+}
+
+/**
+ * @brief Check that the single-particle Green's function has shape (r, n_hyb, n_hyb), i.e. the interaction flavours are not external legs
+ */
+TEST(BlockSparseDynintEvaluator, spgf_excludes_the_interaction_flavours) {
+
+  auto m    = dynint_model(/*n_int=*/2);
+  int n_hyb = static_cast<int>(m.ad.get_fops().size());
+  int n_int = static_cast<int>(m.dynint_ops.size());
+  ASSERT_GT(n_int, 0) << "vacuous test: without interaction flavours n_hyb == n";
+
+  auto G     = ad_to_atom_prop(m.ad, beta, Lambda, eps);
+  auto itops = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt    = ad_to_atom_prop(m.ad, beta, itops);
+
+  DiagramEvaluator D(m.hyb_poles, m.hyb_coeffs, G[0].mesh(), m.ad, m.dynint_ops, m.dynint_coeffs);
+  ASSERT_EQ(D.n, n_hyb + n_int);
+
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  auto spgf                   = D.compute_single_ptcle_gf(Gt, topology);
+
+  EXPECT_EQ(spgf.extent(1), n_hyb) << "the spgf has " << spgf.extent(1) << " rows, i.e. the interaction flavours are being emitted as external legs";
+  EXPECT_EQ(spgf.extent(2), n_hyb) << "the spgf has " << spgf.extent(2)
+                                   << " columns, i.e. the interaction flavours are being emitted as external legs";
+  EXPECT_EQ(spgf.extent(0), D.r);
+}
+
+/**
+ * @brief Check that Nmax covers the largest atom_diag subspace, which sizes the evaluation buffers
+ */
+TEST(BlockSparseDynintEvaluator, Nmax_covers_the_largest_subspace) {
+
+  auto m    = dynint_model(/*n_int=*/1);
+  int n_int = static_cast<int>(m.dynint_ops.size());
+  int msd   = max_subspace_dim(m.ad);
+  ASSERT_GT(msd, 1) << "vacuous test: every subspace of this fixture is one-dimensional"; // measured 2
+
+  auto G = ad_to_atom_prop(m.ad, beta, Lambda, eps);
+  DiagramEvaluator D_ad(m.hyb_poles, m.hyb_coeffs, G[0].mesh(), m.ad, m.dynint_ops, m.dynint_coeffs);
+  EXPECT_GE(D_ad.Nmax, msd);
+
+  auto Fq  = std::get<0>(get_operators_and_interactions(m.ad, m.hyb_coeffs, m.dynint_coeffs, m.dynint_ops));
+  auto ext = get_extended_coefficients(m.hyb_coeffs, m.dynint_coeffs);
+  DiagramEvaluator D_fq(beta, Lambda, eps, m.hyb_poles, ext, Fq, n_int);
+  EXPECT_GE(D_fq.Nmax, msd);
+}
+
+/**
+ * @brief Check that Nmax is derived from the whole quartet and not from symmetry set 0
+ *
+ * @details The symmetry set order is arbitrary, so set 0 may be a projector-like interaction operator with a single 1x1 block. Only the
+ * constructor runs here, since evaluating with an undersized Nmax would write out of bounds.
+ */
+TEST(BlockSparseDynintEvaluator, Nmax_does_not_assume_symmetry_set_zero_covers_the_space) {
+
+  auto ad       = unequal_sym_set_model(true);
+  int n_hyb     = static_cast<int>(ad.get_fops().size());
+  auto labels_f = std::get<1>(get_operators(ad, nda::zeros<dcomplex>(p_poles, n_hyb, n_hyb)));
+  auto hyb      = sym_set_diagonal_hyb(labels_f, p_poles);
+
+  // A projector onto a single Fock state: block diagonal, and its only block is 1x1.
+  std::vector<many_body_operator_real> ops = {many_body_operator_real(n("A", 0) * n("A", 1) * n("B", 0))};
+  auto d                                   = nda::zeros<dcomplex>(p_poles, 1, 1);
+  d(0, 0, 0)                               = 0.61;
+  d(1, 0, 0)                               = 0.54;
+
+  auto Fq  = std::get<0>(get_operators_and_interactions(ad, hyb, d, ops));
+  auto ext = get_extended_coefficients(hyb, d);
+
+  long s_int = Fq.sym_set_labels(Fq.sym_set_labels.size() - 1); // the projector's own set
+  ASSERT_EQ(Fq.sym_set_sizes(s_int), 1);
+  auto Fq_perm = permute_set_to_front(Fq, s_int, ext);
+
+  // check that the permuted set 0 misses the largest block
+  int msd = max_subspace_dim(ad);
+  ASSERT_LT(nda::max_element(Fq_perm.Fs[0].get_block_sizes()), msd)
+     << "vacuous test: symmetry set 0 of the permuted quartet already covers the largest subspace";
+
+  nda::vector<double> hyb_poles = {1.3, -0.8};
+  DiagramEvaluator D(beta, Lambda, eps, hyb_poles, ext, Fq_perm, /*n_int=*/1);
+  EXPECT_GE(D.Nmax, msd) << "Nmax must be the max block dimension over the WHOLE quartet, not over Fs[0]";
+}
+
+/**
+ * @brief Check that the symmetry set order is a pure relabeling that does not change the self-energy
+ */
+TEST(BlockSparseDynintEvaluator, symmetry_set_order_does_not_change_sigma) {
+
+  auto ad       = unequal_sym_set_model(true);
+  int n_hyb     = static_cast<int>(ad.get_fops().size());
+  auto labels_f = std::get<1>(get_operators(ad, nda::zeros<dcomplex>(p_poles, n_hyb, n_hyb)));
+  auto hyb      = sym_set_diagonal_hyb(labels_f, p_poles);
+
+  auto Fq = std::get<0>(get_operators(ad, hyb));
+  ASSERT_GT(nda::max_element(Fq.sym_set_labels), 0) << "vacuous test: this model has only one symmetry set";
+  auto Fq_perm = permute_set_to_front(Fq, 1, hyb); // labels [0,0,1] -> [1,1,0]
+
+  nda::vector<double> hyb_poles = {1.3, -0.8};
+  nda::array<int, 2> topology   = {{0, 2}, {1, 3}};
+  auto itops                    = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt                       = ad_to_atom_prop(ad, beta, itops);
+
+  DiagramEvaluator Da(beta, Lambda, eps, hyb_poles, hyb, Fq);
+  DiagramEvaluator Db(beta, Lambda, eps, hyb_poles, hyb, Fq_perm);
+  auto Sa = BlockDiagOpFun(Da.compute_self_energy(Gt, topology));
+  auto Sb = BlockDiagOpFun(Db.compute_self_energy(Gt, topology));
+
+  double err = 0.0, scale = 0.0;
+  for (int b = 0; b < Sa.get_num_block_cols(); ++b) {
+    err   = std::max(err, nda::max_element(nda::abs(Sa.get_block(b) - Sb.get_block(b))));
+    scale = std::max(scale, nda::max_element(nda::abs(Sa.get_block(b))));
+  }
+  ASSERT_GT(scale, 0.01) << "vacuous test: the self-energy is zero";
+  EXPECT_LE(err, 1.0e-14) << "max|Sigma_original - Sigma_permuted| = " << err;
+}
