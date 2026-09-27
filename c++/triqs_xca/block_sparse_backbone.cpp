@@ -420,7 +420,7 @@ triqs::gfs::block_gf<triqs::mesh::dlr_imtime> DiagramEvaluator::compute_self_ene
   Sigma = Gt; 
   Sigma *= 0;
 
-  Backbone backbone(topology, n);
+  Backbone backbone(topology, n, n_int);
   eval_self_energy(Gt, backbone);
 
   // This converts a BlockDiagOpFun to a triqs::gfs::block_gf (move into BlockDiagOpFun?)
@@ -454,7 +454,7 @@ triqs::gfs::block_gf<triqs::mesh::dlr_imtime> DiagramEvaluator::compute_self_ene
   Sigma = Gt;
   Sigma *= 0;
 
-  Backbone backbone(topology, n);
+  Backbone backbone(topology, n, n_int);
 
   for( auto f_ix : f_ix_vec ) {
     eval_self_energy(Gt, backbone, f_ix);
@@ -481,7 +481,7 @@ triqs::gfs::block_gf<triqs::mesh::dlr_imtime> DiagramEvaluator::compute_self_ene
   Sigma = Gt;
   Sigma *= 0;
 
-  Backbone backbone(topology, n);
+  Backbone backbone(topology, n, n_int);
   eval_self_energy(Gt, backbone, f_ix);
 
   // This converts a BlockDiagOpFun to a triqs::gfs::block_gf (move into BlockDiagOpFun?)
@@ -767,19 +767,19 @@ void DiagramEvaluator::reset() {
 }
 
 int DiagramEvaluator::get_num_self_energy_backbones(nda::array_const_view<int, 2> topology) {
-  Backbone backbone(topology, n);
+  Backbone backbone(topology, n, n_int);
   return static_cast<int>(backbone.fb_ix_max * backbone.o_ix_max * pow(hyb.poles.size(), backbone.m - 1));
 }
 
 void DiagramEvaluator::print_self_energy_backbone(nda::array_const_view<int, 2> topology, int f_ix) {
-  Backbone backbone(topology, n);
+  Backbone backbone(topology, n, n_int);
   backbone.set_flat_index(f_ix, hyb.poles);
   std::cout << "Self-energy backbone for f_ix = " << f_ix << ":\n";
   std::cout << backbone << std::endl;
 }
 
 int DiagramEvaluator::get_num_single_ptcle_gf_backbones(nda::array_const_view<int, 2> topology) {
-  CorrelatorBackbone backbone(topology, n);
+  CorrelatorBackbone backbone(topology, n, n_int);
   return static_cast<int>(backbone.fb_ix_max * backbone.o_ix_max * pow(hyb.poles.size(), backbone.m - 1));
 }
 
@@ -834,7 +834,7 @@ nda::array<dcomplex, 3> DiagramEvaluator::compute_single_ptcle_gf(
   nda::array<dcomplex, 3> DiagramEvaluator::compute_single_ptcle_gf(
   BlockDiagOpFun &Gt, nda::array_const_view<int, 2> topology) 
   {
-  CorrelatorBackbone backbone(topology, n);
+  CorrelatorBackbone backbone(topology, n, n_int);
   auto mu_ops  = setup_mu_ops_for_single_ptcle_gf();
   auto kap_ops = setup_kap_ops_for_single_ptcle_gf();
   return eval_correlator(Gt, backbone, mu_ops, kap_ops);
@@ -849,7 +849,7 @@ nda::array<dcomplex, 3> DiagramEvaluator::compute_single_ptcle_gf(
 nda::array<dcomplex, 3> DiagramEvaluator::compute_single_ptcle_gf(
   BlockDiagOpFun &Gt, nda::array_const_view<int, 2> topology, int f_ix) 
   {
-  CorrelatorBackbone backbone(topology, n);
+  CorrelatorBackbone backbone(topology, n, n_int);
   auto mu_ops  = setup_mu_ops_for_single_ptcle_gf();
   auto kap_ops = setup_kap_ops_for_single_ptcle_gf();
   return eval_correlator(Gt, backbone, mu_ops, kap_ops, f_ix);
@@ -859,7 +859,7 @@ nda::array<dcomplex, 3> DiagramEvaluator::compute_single_ptcle_gf(
   triqs::gfs::block_gf_view<triqs::mesh::dlr_imtime> G_ppsc, nda::array_const_view<int, 2> topology, nda::array_const_view<int, 1> f_ix_vec) 
   {
   BlockDiagOpFun Gt(G_ppsc);
-  CorrelatorBackbone backbone(topology, n);
+  CorrelatorBackbone backbone(topology, n, n_int);
   auto mu_ops  = setup_mu_ops_for_single_ptcle_gf();
   auto kap_ops = setup_kap_ops_for_single_ptcle_gf();
   nda::array<dcomplex, 3> correlator = nda::zeros<dcomplex>(r, mu_ops.size(), kap_ops.size());
@@ -870,7 +870,7 @@ nda::array<dcomplex, 3> DiagramEvaluator::compute_single_ptcle_gf(
 }
 
 void DiagramEvaluator::print_single_ptcle_gf_backbone(nda::array_const_view<int, 2> topology, int f_ix) {
-  CorrelatorBackbone backbone(topology, n);
+  CorrelatorBackbone backbone(topology, n, n_int);
   backbone.set_flat_index(f_ix, hyb.poles);
   std::cout << "Single-particle Green's function backbone for f_ix = " << f_ix << ":\n";
   std::cout << backbone << std::endl;
@@ -936,7 +936,7 @@ nda::array<dcomplex, 3> DiagramEvaluator::compute_one_time_correlator(
   bool is_fermionic = is_fermionic_ops(0, 0); // Pass on statistics to diagram evaluator
 
   BlockDiagOpFun Gt(G_ppsc);
-  CorrelatorBackbone backbone(topology, n);
+  CorrelatorBackbone backbone(topology, n, n_int);
 
   auto mu_ops  = setup_ops_from_triqs_2nd_quant_ops(ops_tau, ad);
   auto kap_ops = setup_ops_from_triqs_2nd_quant_ops(ops_0, ad);
