@@ -41,7 +41,7 @@ def get_ed_ref(eps0, g, omega0, mesh_f_tau, mesh_b_tau, Nb_max=10):
 
 
 def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12,
-                conserved_operators=[]):
+                conserved_operators=[], solver_class=BlockSparseSolver):
 
     """ AIM with a single fermionic level coupled to a bosonic mode with linear coupling,
     i.e. a retarded interaction given by the bosonic propagator. Returns the solver and the
@@ -51,7 +51,7 @@ def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12,
 
     from triqs.operators import n
 
-    S = BlockSparseSolver(
+    S = solver_class(
         H_loc=(eps0 - mu) * n('0', 0),
         beta=beta, w_max=w_max, eps=eps, gf_struct=[['0', 1]],
         conserved_operators=conserved_operators)
@@ -70,6 +70,33 @@ def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12,
     S.set_dynamic_interactions(dynint_ops=[n('0', 0)], dynint_tau=D0_tau)
 
     return S, mu
+
+
+def solve_dynint_one_fermion(
+        beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12,
+        order=1, conserved_operators=[], hyb_comp=True, solver_class=BlockSparseSolver):
+
+    """ Solve the one-fermion dynint model and return the fields rather than the error norms, for
+    tests that need a pointwise comparison. Contains no plotting, the verbose branch stays in
+    test_dynint_one_fermion. """
+
+    from triqs.operators import n
+
+    S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps,
+                        conserved_operators=conserved_operators, solver_class=solver_class)
+
+    f_mesh = S.mesh_tau
+
+    S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=hyb_comp)
+
+    chi_tau = S.eval_one_time_correlator(
+        S.G, max_order=order, ops_tau=[n('0', 0)], ops_0=[n('0', 0)])
+
+    # ED reference on the solver's imaginary time mesh, where both G_tau and chi_tau live
+    g_tau_ed_0, chi_tau_ed_0 = get_ed_ref(eps0 - mu, 0.0, omega0, f_mesh, f_mesh, Nb_max=10)
+    g_tau_ed, chi_tau_ed = get_ed_ref(eps0 - mu, g, omega0, f_mesh, f_mesh, Nb_max=10)
+
+    return S, chi_tau, g_tau_ed, chi_tau_ed, g_tau_ed_0, chi_tau_ed_0
 
 
 def test_dynint_one_fermion(
@@ -93,21 +120,9 @@ def test_dynint_one_fermion(
     function and of chi_nn.
     """
 
-    from triqs.operators import n
-
-    S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps,
-                        conserved_operators=conserved_operators)
-
-    f_mesh = S.mesh_tau
-
-    S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=hyb_comp)
-
-    chi_tau = S.eval_one_time_correlator(
-        S.G, max_order=order, ops_tau=[n('0', 0)], ops_0=[n('0', 0)])
-
-    # ED reference on the solver's imaginary time mesh, where both G_tau and chi_tau live
-    g_tau_ed_0, chi_tau_ed_0 = get_ed_ref(eps0 - mu, 0.0, omega0, f_mesh, f_mesh, Nb_max=10)
-    g_tau_ed, chi_tau_ed = get_ed_ref(eps0 - mu, g, omega0, f_mesh, f_mesh, Nb_max=10)
+    S, chi_tau, g_tau_ed, chi_tau_ed, g_tau_ed_0, chi_tau_ed_0 = solve_dynint_one_fermion(
+        beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps,
+        order=order, conserved_operators=conserved_operators, hyb_comp=hyb_comp)
 
     if verbose:
         from triqs.plot.mpl_interface import oplot, plt
@@ -399,40 +414,163 @@ def test_dynint_block_sparse(verbose=False):
         f'block-sparse and dense chi errors differ: {chi_bs:2.6E} vs {chi_dense:2.6E}'
 
 
-def test_dynint_block_sparse_hyb_comp(verbose=False):
+class _ReversedPoleSolver(BlockSparseSolver):
 
-    """ Dense and block-sparse must agree with hybridization compression on. Currently failing.
+    """ Reverses the fitted pole order, an exact-arithmetic invariant that probes the conditioning of
+    the pole set without a reference or a second evaluator. """
 
-    At order 3 with hyb_comp=True the G errors of the two paths differ by 2.9e-09, while they agree to
-    6e-16 with compression off. Delta_tau is zero in this model, so the compression acts on the
-    dynamical interaction alone and does not depend on the atom_diag partition. Comparing the dense
-    evaluator's own paired and unpaired self-energy routines at order 3 gives a 4.75% discrepancy with
-    compression on, so the suspect is reverse_hyb_line_zero() reading the reflected hybridization,
-    which is KMS-consistent for an exact DLR representation but not necessarily for a fitted one.
-    Until this is resolved test_dynint_block_sparse runs with hyb_comp=False. """
+    def fit_hybridization(self, *args, **kwargs):
+        super().fit_hybridization(*args, **kwargs)
+        poles = np.asarray(self.hyb.poles)[::-1].copy()
+        coeffs = np.ascontiguousarray(np.asarray(self.hyb.coefficients)[::-1])
+        tol, compression, fit_error = self.hyb.tol, self.hyb.compression, self.hyb.fit_error
+        self.set_hybridization_poles_and_coefficients(poles, coeffs)  # rebuilds self.hyb
+        self.hyb.tol, self.hyb.compression, self.hyb.fit_error = tol, compression, fit_error
+        if self.has_dynamic_interactions:
+            self.dynint_coeffs = np.ascontiguousarray(np.asarray(self.dynint_coeffs)[::-1])
 
-    kwargs = dict(order=3, hyb_comp=True, verbose=False)
 
-    g_dense, chi_dense = test_dynint_one_fermion(conserved_operators=[], **kwargs)
-    g_bs, chi_bs       = test_dynint_one_fermion(conserved_operators='automatic', **kwargs)
+def test_dynint_hyb_comp_pole_window(verbose=False):
+
+    """ The compressed pole set must stay inside the DLR window.
+
+    adapol's pole locations are unconstrained, and a pole at |beta*omega| > Lambda is not representable
+    in a DLR basis built for Lambda, so every vals2coefs round trip silently loses it. The bound is
+    Lambda itself, since the uncompressed DLR fallback reaches 0.9995 * Lambda. """
+
+    S, mu = make_solver()
+    beta = S.mesh_tau.beta
+    Lambda = beta * S.mesh_tau.w_max
+
+    S.fit_hybridization(tol=1e-9, compression=True, verbose=False)
+
+    bw = beta * np.asarray(S.hyb.poles)
+    worst = np.max(np.abs(bw))
+
+    # the uncompressed DLR fallback is inside the window by construction, so check that compression ran
+    assert S.hyb.compression, 'vacuous: compression did not run, so the window bound is trivial'
+    assert S.hyb.fit_error is not None and S.hyb.fit_error < 1e-9, \
+        f'vacuous: adapol did not produce a fit (fit_error = {S.hyb.fit_error})'
+    assert len(bw) == 2, \
+        f'vacuous: expected the 3-pole adapol fit to be filtered to 2, got {len(bw)} poles -- ' \
+        f'either compression was skipped or the filter did not fire'
 
     if verbose:
-        print(f'dense: g_error = {g_dense:2.3E}  chi_error = {chi_dense:2.3E}')
-        print(f'bs   : g_error = {g_bs:2.3E}  chi_error = {chi_bs:2.3E}')
+        print(f'pole window: max|beta*omega| = {worst:2.4E}  Lambda = {Lambda:2.4E}  '
+              f'ratio = {worst / Lambda:2.4E}  n_poles = {len(bw)}')
 
-    # the same comparison with compression off must pass
-    g_d0, chi_d0 = test_dynint_one_fermion(conserved_operators=[], order=3, hyb_comp=False, verbose=False)
-    g_b0, chi_b0 = test_dynint_one_fermion(conserved_operators='automatic', order=3, hyb_comp=False, verbose=False)
-    assert abs(g_b0 - g_d0) < 1e-12, \
-        f'premise broken: dense and block-sparse already disagree at order 3 WITHOUT compression ' \
-        f'({g_b0:2.3E} vs {g_d0:2.3E}), so this is not a compression problem'
+    assert worst <= Lambda * (1 + 1e-10), \
+        f'compressed pole set leaves the DLR window: max|beta*omega| = {worst:2.4E} vs ' \
+        f'Lambda = {Lambda:2.4E} ({worst / Lambda:.1f}x). Poles beyond Lambda are not ' \
+        f'representable in this basis. beta*omega = {np.sort(bw)}'
 
-    assert abs(g_bs - g_dense) < 1e-12, \
-        f'with hyb_comp=True at order 3, block-sparse and dense G errors ' \
-        f'differ by {abs(g_bs - g_dense):2.3E} ({g_bs:2.3E} vs {g_dense:2.3E}); the same comparison ' \
-        f'with hyb_comp=False agrees to {abs(g_b0 - g_d0):2.3E}'
-    assert abs(chi_bs - chi_dense) < 1e-12, \
-        f'with hyb_comp=True at order 3, chi errors differ by {abs(chi_bs - chi_dense):2.3E}'
+
+def test_dynint_hyb_comp_edge_pole_survives(verbose=False):
+
+    """ A physical pole sitting exactly on the window edge must survive the filter.
+
+    adapol's pole locations are not exact, so a mode at w_max comes back slightly outside the window,
+    by up to 3e-09 relative over the configurations measured, while the smallest artefact overshoot
+    measured is 1.8e-03, and pole_window_slack sits between them. omega0 == w_max is the natural
+    choice for the mode frequency. """
+
+    # eps is swept since the physical overshoot tracks the basis accuracy nearly linearly, so a fixed slack fails at one end
+    for beta, w_max, eps in ((2.1, 1.0, 1e-12), (1.0, 1.0, 1e-6), (2.1, 0.5, 1e-6),
+                             (0.3, 1.0, 1e-8), (5.0, 2.0, 1e-10)):
+        S, mu = make_solver(beta=beta, w_max=w_max, omega0=w_max, eps=eps)
+        Lambda = beta * w_max
+        S.fit_hybridization(tol=1e-9, compression=True, verbose=False)
+
+        bw = beta * np.asarray(S.hyb.poles)
+        weight = np.abs(np.asarray(S.dynint_coeffs)).reshape(len(bw), -1).max(axis=1)
+        dominant = weight > 0.5 * weight.max()
+
+        if verbose:
+            print(f'edge pole: beta={beta} w_max={w_max} eps={eps:.0e} slack={S.pole_window_slack:.1e} '
+                  f'n_poles={len(bw)} max_ratio={np.max(np.abs(bw)) / Lambda:.12f} '
+                  f'rel_weight={np.sort(weight / weight.max())}')
+
+        assert len(bw) >= 2, \
+            f'beta={beta}, w_max={w_max}, eps={eps:.0e}: the filter left {len(bw)} pole(s). The ' \
+            f'physical mode is AT the window edge and must survive -- pole_window_slack ' \
+            f'({S.pole_window_slack:.1e}) is too tight.'
+        assert np.sum(dominant) >= 2, \
+            f'beta={beta}, w_max={w_max}, eps={eps:.0e}: only {np.sum(dominant)} dominant pole(s) ' \
+            f'survived; the +-omega0 pair carries the physics and both must be kept'
+        # the survivors are inside the window to within the slack
+        assert np.max(np.abs(bw)) <= Lambda * (1 + S.pole_window_slack), \
+            f'beta={beta}, w_max={w_max}, eps={eps:.0e}: a pole at ratio ' \
+            f'{np.max(np.abs(bw)) / Lambda:.12f} survived the filter'
+
+
+def test_dynint_block_sparse_hyb_comp(verbose=False):
+
+    """ Dense and block-sparse agree pointwise with hybridization compression on, at full accuracy.
+
+    The comparison is max|G_bs - G_dense| rather than a difference of error norms, which two solvers
+    wrong in different directions can agree on. The uncompressed block-sparse solve is the accuracy
+    reference, since agreement alone would accept two evaluators that are wrong together. """
+
+    kw = dict(order=3, hyb_comp=True)
+    Sd, chi_d, g_ed, chi_ed, _, _ = solve_dynint_one_fermion(conserved_operators=[], **kw)
+    Sb, chi_b, *_                 = solve_dynint_one_fermion(conserved_operators='automatic', **kw)
+    Su, chi_u, *_                 = solve_dynint_one_fermion(conserved_operators='automatic',
+                                                             order=3, hyb_comp=False)
+
+    dG = np.max(np.abs(Sb.G_tau['0'].data - Sd.G_tau['0'].data))
+    dchi = np.max(np.abs(chi_b.data - chi_d.data))
+    g_dense = np.max(np.abs(Sd.G_tau['0'].data - g_ed.data))
+    g_bs = np.max(np.abs(Sb.G_tau['0'].data - g_ed.data))
+    g_uncomp = np.max(np.abs(Su.G_tau['0'].data - g_ed.data))
+
+    if verbose:
+        print(f'pointwise : max|G_bs - G_dense| = {dG:2.3E}  max|chi_bs - chi_dense| = {dchi:2.3E}')
+        print(f'accuracy  : g_dense = {g_dense:2.6E}  g_bs = {g_bs:2.6E}  '
+              f'g_uncompressed = {g_uncomp:2.6E}')
+
+    assert dG < 1e-13, \
+        f'compressed: dense and block-sparse disagree pointwise, max|G_bs - G_dense| = {dG:2.3E}'
+    assert dchi < 1e-13, \
+        f'compressed: dense and block-sparse disagree pointwise, max|chi_bs - chi_dense| = {dchi:2.3E}'
+    assert abs(g_dense - g_uncomp) < 1e-13, \
+        f'compression costs the DENSE evaluator accuracy: {g_dense:2.6E} against the ' \
+        f'uncompressed {g_uncomp:2.6E}. Agreement between evaluators is not enough -- both can be ' \
+        f'wrong together.'
+    assert abs(g_bs - g_uncomp) < 1e-13, \
+        f'compression costs the BLOCK-SPARSE evaluator accuracy: {g_bs:2.6E} against the ' \
+        f'uncompressed {g_uncomp:2.6E}'
+
+
+def test_dynint_hyb_comp_pole_relabeling(verbose=False):
+
+    """ Reversing the fitted pole order must not move G, on both evaluators at order 3. Relabeling is
+    exactly invariant, so any movement is the conditioning of the pole set. At order 2 the reversal
+    is invisible even with a defect, so order 3 is required. """
+
+    kw = dict(order=3, hyb_comp=True)
+    for conserved_operators, tag in (([], 'dense'), ('automatic', 'block-sparse')):
+        S, chi, *_ = solve_dynint_one_fermion(conserved_operators=conserved_operators, **kw)
+        R, chi_R, *_ = solve_dynint_one_fermion(conserved_operators=conserved_operators,
+                                                solver_class=_ReversedPoleSolver, **kw)
+
+        # check that the reversal happened, reversing a symmetric pair with equal residues is a numerical identity
+        assert not np.array_equal(np.asarray(R.hyb.poles), np.asarray(S.hyb.poles)), \
+            f'{tag}: the pole order was not actually reversed, so this test proves nothing'
+        dG = np.max(np.abs(R.G_tau['0'].data - S.G_tau['0'].data))
+        dchi = np.max(np.abs(chi_R.data - chi.data))
+        scale = np.max(np.abs(S.G_tau['0'].data))
+
+        if verbose:
+            print(f'relabeling/{tag}: max|dG| = {dG:2.3E}  max|dchi| = {dchi:2.3E}  '
+                  f'max|G| = {scale:2.3E}')
+
+        assert dG < 1e-13, \
+            f'{tag}: reversing the pole order moved G by {dG:2.3E} against max|G| = {scale:2.3E}. ' \
+            f'Relabeling is an exact-arithmetic invariant, so this is the conditioning of the ' \
+            f'pole set, not a diagram error.'
+        assert dchi < 1e-13, \
+            f'{tag}: reversing the pole order moved chi by {dchi:2.3E}'
+
 
 
 if __name__ == '__main__':
@@ -442,5 +580,7 @@ if __name__ == '__main__':
     test_dynint_block_sparse(verbose=True)
     test_dynint_h5_roundtrip(verbose=True)
     test_dynint_block_sparse_convergence(verbose=True)
-    # currently failing, keep it last so that everything above still runs
+    test_dynint_hyb_comp_pole_window(verbose=True)
+    test_dynint_hyb_comp_edge_pole_survives(verbose=True)
     test_dynint_block_sparse_hyb_comp(verbose=True)
+    test_dynint_hyb_comp_pole_relabeling(verbose=True)

@@ -34,7 +34,7 @@ def scatter_array_over_ranks(arr):
 
 
 class BlockSparseSolver(object):
-    
+
     """ Solver class for triqs_xca using the block sparse algorithm. 
     
     Parameters
@@ -73,6 +73,10 @@ class BlockSparseSolver(object):
     It is a block Green's function in imaginary time.
 
     """
+
+    # floor and eps multiplier of the relative slack on the DLR window, see pole_window_slack
+    pole_window_slack_floor = 1e-9
+    pole_window_slack_per_eps = 10.0
 
     def __init__(self, H_loc, beta, w_max, eps, gf_struct, 
                  conserved_operators='automatic', dlr_symmetrize=False,
@@ -144,6 +148,77 @@ class BlockSparseSolver(object):
         self.timer.stop()
 
 
+    @property
+    def pole_window_slack(self):
+
+        """ Relative slack on the DLR window below which an out-of-window pole is taken as physics.
+
+        A pole physically at w_max comes back from adapol slightly outside the window, by an amount
+        that tracks the accuracy eps of the basis, while the overshoot of an artefact pole is orders
+        of magnitude larger. The pointwise residual check in __restrict_poles_to_dlr_window is the
+        safety net for the cases where this estimate is wrong. """
+
+        return max(self.pole_window_slack_floor, self.pole_window_slack_per_eps * self.mesh_tau.eps)
+
+
+    def __restrict_poles_to_dlr_window(self, poles, pole_weights, fit_error, tol):
+
+        """ Drop compressed poles outside the DLR window and least-squares refit the survivors.
+
+        adapol constrains the fit error and not the pole locations, and a pole at |beta*omega| > Lambda
+        is not representable in a DLR basis built for Lambda, so every vals2coefs round trip silently
+        loses it. The out-of-window pole usually carries numerical dust but can carry weight, so the
+        survivors are refit and the result is checked pointwise, raising if the discarded pole was
+        load-bearing. The slack pole_window_slack separates a pole physically at w_max, which is a
+        natural choice for the mode frequency, from an artefact. """
+
+        Lambda = self.beta * self.mesh_tau.w_max
+        beta_omega = self.beta * np.asarray(poles)
+        outside = np.abs(beta_omega) > Lambda * (1 + self.pole_window_slack)
+
+        if not np.any(outside):
+            return poles, pole_weights, fit_error
+
+        keep = ~outside
+        n_keep = int(np.sum(keep))
+
+        if n_keep == 0:
+            raise RuntimeError(
+                f'Hybridization compression: every one of the {len(poles)} fitted poles lies '
+                f'outside the DLR window (max|beta*omega| = {np.max(np.abs(beta_omega)):2.2E} vs '
+                f'Lambda = {Lambda:2.2E}), so the fit cannot be repaired. Re-run with '
+                f'hyb_comp=False, or widen w_max.')
+
+        from adapol.sop import SumOfSimplePoles
+
+        sop = SumOfSimplePoles(poles=np.asarray(poles), residues=np.asarray(pole_weights))
+        refit = sop.best_imtime_lstsq_l2_norm_approximation_using_poles(
+            np.asarray(poles)[keep], self.beta)
+
+        # Pointwise on the solver's tau nodes: a dropped pole contributes ~ -R_far at tau -> 0+ however far
+        # out it sits, while its L2 mass and its least-squares footprint on the survivors vanish in that limit
+        tau = np.array([float(t) for t in self.mesh_tau])
+        residual = np.max(np.abs(sop.eval_imtime(tau, self.beta) - refit.eval_imtime(tau, self.beta)))
+
+        # a large residual means the discarded pole was load-bearing
+        if residual > max(10 * fit_error, tol):
+            raise RuntimeError(
+                f'Hybridization compression: dropping {len(poles) - n_keep} out-of-window pole(s) '
+                f'changed the hybridization by {residual:2.2E} pointwise, above both 10x the fit '
+                f'error ({10 * fit_error:2.2E}) and tol ({tol:2.2E}). The discarded pole carried '
+                f'real weight, so it is likely physics this DLR window cannot represent. If the '
+                f'pole sits AT the window edge, raise eps or w_max so the fit resolves it; '
+                f'otherwise widen w_max, or re-run with hyb_comp=False.')
+
+        if is_root():
+            print(f'Adapol: WARNING! {len(poles) - n_keep} of {len(poles)} poles outside the DLR '
+                  f'window (max|beta*omega| = {np.max(np.abs(beta_omega)):2.2E} > Lambda = '
+                  f'{Lambda:2.2E}), dropped and refit: N_poles = {n_keep}, refit residual = '
+                  f'{residual:2.2E} (adapol fit error {fit_error:2.2E}).')
+
+        return np.asarray(poles)[keep], np.ascontiguousarray(refit.R), fit_error
+
+
     @timer('Adapol hybridization fit')
     def fit_hybridization(self, tol=None, compression=False, verbose=True):
 
@@ -164,17 +239,24 @@ class BlockSparseSolver(object):
 
             assert( tol is not None and tol > 0 ), 'Error: tol must be provided and positive when compression is enabled.'
 
-            from adapol.triqs import TriqsDLRCompression
-        
             try:
+                # The import is inside the try so that a missing adapol falls back to the direct DLR
+                # coefficients, and AssertionError is included since adapol asserts internally on inputs it can not fit
+                from adapol.triqs import TriqsDLRCompression
                 tdc = TriqsDLRCompression(Delta_tau_dense, tol=tol, verbose=verbose and is_root())
                 poles, pole_weights, fit_error = tdc.poles, tdc.residues, tdc.error
-            except ValueError as e:
+            except (ValueError, ImportError, AssertionError) as e:
                 fit_error = None
                 if is_root():
                     print(f'Adapol: WARNING! TriqsDLRCompression failed with error: {e}. Using direct DLR coefficients instead.')
 
-            if verbose and is_root():
+            # outside the try above, so that the RuntimeErrors of the window filter stay loud
+            if fit_error is not None:
+                poles, pole_weights, fit_error = self.__restrict_poles_to_dlr_window(
+                    poles, pole_weights, fit_error, tol)
+
+            # fit_error is None when the fit failed above
+            if verbose and is_root() and fit_error is not None:
                 if fit_error >= tol:
                     print(f'Adapol: WARNING! Fit error = {fit_error:2.2E} >= tol = {tol:2.2E}, N_poles = {len(poles)}')
                 else:
