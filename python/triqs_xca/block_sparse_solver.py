@@ -303,7 +303,10 @@ class BlockSparseSolver(object):
             Whether to compress the hybridization function. Default: ``True``.
             When set to ``False``, the hybridization function is represented using the full DLR basis.
         spgf_max_order : int, optional
-            Maximum order for the single particle Green's function evaluation. If not provided, it defaults to ``max_order``.
+            Maximum order of the single particle Green's function diagram expansion. 
+            Default: ``max_order``, is the Luttinger-Ward-consistent choice. 
+            However, using ``spgf_max_order = max_order + 1`` improves convergence order 
+            by one, while giving up the conserving property of Luttinger-Ward.
         normalization : str, optional
             Normalization method for the pseudo particle Green's function. Default: ``'classic'``.
 
@@ -433,6 +436,8 @@ class BlockSparseSolver(object):
             Whether to solve the Dyson equation to obtain the pseudo particle Green's function. Default: ``False``.
         spgf_max_order : int, optional
             Maximum order for the single particle Green's function evaluation. If not provided, it defaults to ``max_order``.
+            
+            See ``solve()`` for why the default is ``max_order`` and what raising it costs.
         verbose : bool, optional
             Verbosity flag controlling level of printouts. Default: ``True``.
         """

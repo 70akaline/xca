@@ -19,6 +19,8 @@ set(all_tests
   h5_io_bs
   dense
   dynint
+  dynint_spin_flip
+  dynint_transverse
   topology
   triqs_solver
   one_spinful_fermion
