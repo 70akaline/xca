@@ -40,7 +40,8 @@ def get_ed_ref(eps0, g, omega0, mesh_f_tau, mesh_b_tau, Nb_max=10):
     return g_tau, chi_tau
 
 
-def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12):
+def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12,
+                conserved_operators=[]):
 
     """ AIM with a single fermionic level coupled to a bosonic mode with linear coupling,
     i.e. a retarded interaction given by the bosonic propagator. Returns the solver and the
@@ -52,7 +53,8 @@ def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12):
 
     S = BlockSparseSolver(
         H_loc=(eps0 - mu) * n('0', 0),
-        beta=beta, w_max=w_max, eps=eps, gf_struct=[['0', 1]], conserved_operators=[])
+        beta=beta, w_max=w_max, eps=eps, gf_struct=[['0', 1]],
+        conserved_operators=conserved_operators)
 
     S.Delta_tau['0'].data[:] = 0.
 
@@ -72,7 +74,7 @@ def make_solver(beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12):
 
 def test_dynint_one_fermion(
         beta=2.1, eps0=-0.1, g=0.1, omega0=1., w_max=2.0, eps=1e-12,
-        order=1, verbose=False):
+        order=1, verbose=False, conserved_operators=[], hyb_comp=True):
 
     """" Solve AIM with single fermionic level coupled to a bosonic mode
     with linear coupling and retarded interaction given by the bosonic propagator.
@@ -93,11 +95,12 @@ def test_dynint_one_fermion(
 
     from triqs.operators import n
 
-    S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps)
+    S, mu = make_solver(beta=beta, eps0=eps0, g=g, omega0=omega0, w_max=w_max, eps=eps,
+                        conserved_operators=conserved_operators)
 
     f_mesh = S.mesh_tau
 
-    S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=True)
+    S.solve(max_order=order, spgf_max_order=1, maxiter=8, tol=1e-8, verbose=True, hyb_comp=hyb_comp)
 
     chi_tau = S.eval_one_time_correlator(
         S.G, max_order=order, ops_tau=[n('0', 0)], ops_0=[n('0', 0)])
@@ -288,6 +291,41 @@ def test_convergence_rate(verbose=False):
                     f'Expected {label} convergence rate of {expected} for order {order}, but got {rate}, diff {diff}'
 
 
+def test_dynint_block_sparse(verbose=False):
+
+    """ The block-sparse evaluator must reproduce the dense one with dynamical interactions.
+
+    The same model is solved with conserved_operators=[] (dense evaluator) and 'automatic' (block-sparse
+    evaluator), and both are compared to the ED reference and to each other. Order 2 is needed to exercise
+    the permutation parity, both G and chi are asserted since the retarded interaction does not enter G,
+    and hyb_comp=False keeps the adapol fit tolerance out of the comparison. """
+
+    from triqs.operators import n
+
+    # verbose=False on the inner calls, their verbose flag ends in a blocking plt.show()
+    kwargs = dict(order=2, hyb_comp=False, verbose=False)
+
+    g_dense, chi_dense = test_dynint_one_fermion(conserved_operators=[], **kwargs)
+    g_bs, chi_bs       = test_dynint_one_fermion(conserved_operators='automatic', **kwargs)
+
+    if verbose:
+        print(f'dense: g_error = {g_dense:2.2E}  chi_error = {chi_dense:2.2E}')
+        print(f'bs   : g_error = {g_bs:2.2E}  chi_error = {chi_bs:2.2E}')
+
+    # both paths must reproduce ED to within the order-2 truncation error
+    assert g_dense < 1e-6, f'dense G is not at the ED reference: {g_dense:2.2E}'
+    assert chi_dense < 1e-4, f'dense chi is not at the ED reference: {chi_dense:2.2E}'
+    assert g_bs < 1e-6, f'block-sparse G is not at the ED reference: {g_bs:2.2E}'
+    assert chi_bs < 1e-4, f'block-sparse chi is not at the ED reference: {chi_bs:2.2E}'
+
+    # the two evaluators compute the same diagrams and must agree up to the summation order
+    assert abs(g_bs - g_dense) < 1e-12, \
+        f'block-sparse and dense G errors differ: {g_bs:2.6E} vs {g_dense:2.6E}'
+    assert abs(chi_bs - chi_dense) < 1e-12, \
+        f'block-sparse and dense chi errors differ: {chi_bs:2.6E} vs {chi_dense:2.6E}'
+
+
 if __name__ == '__main__':
     test_convergence_rate(verbose=False)
     test_dynint_chi(verbose=False)
+    test_dynint_block_sparse(verbose=True)

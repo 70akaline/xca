@@ -278,8 +278,9 @@ class BlockSparseSolver(object):
                 self.d = DenseDiagramEvaluator(self.hyb.poles, self.hyb.coefficients, self.mesh_tau, self.atom_diag)
         else:
             if self.has_dynamic_interactions:
-                raise NotImplementedError('Dynamic interactions are not yet implemented for the block sparse solver (DiagramEvaluator).')
-            self.d = DiagramEvaluator(self.hyb.poles, self.hyb.coefficients, self.mesh_tau, self.atom_diag)
+                self.d = DiagramEvaluator(self.hyb.poles, self.hyb.coefficients, self.mesh_tau, self.atom_diag, self.dynint_ops, self.dynint_coeffs)
+            else:
+                self.d = DiagramEvaluator(self.hyb.poles, self.hyb.coefficients, self.mesh_tau, self.atom_diag)
         #if is_root(): print(f'done.')
 
 

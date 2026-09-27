@@ -13,6 +13,7 @@
 #include <triqs_xca/topology.hpp>
 
 #include "block_sparse_utils.hpp"
+#include "dense_comparison.hpp"
 #include "parallel_atom_diag_check.hpp"
 
 using cppdlr::_;
@@ -86,19 +87,6 @@ namespace {
 
     nda::vector<double> hyb_poles = {1.3, -0.8};
     return {ad, ad_flat, hyb_poles, hyb, d, ops};
-  }
-
-  /// max over blocks of |Sigma_bs(b) - Sigma_dense projected onto subspace b|, and max|Sigma_dense|.
-  std::pair<double, double> compare_sigma_with_dense(BlockDiagOpFun &Sigma, triqs::gfs::block_gf<triqs::mesh::dlr_imtime> const &Sigma_dense,
-                                                     triqs::atom_diag::atom_diag<true> const &ad) {
-    double err = 0.0, scale = 0.0;
-    for (int b = 0; b < Sigma.get_num_block_cols(); ++b) {
-      SCOPED_TRACE("block " + std::to_string(b));
-      auto ref = get_tensor_in_atom_diag_subspace(Sigma_dense[0].data(), b, ad);
-      err      = std::max(err, nda::max_element(nda::abs(Sigma.get_block(b) - ref)));
-      scale    = std::max(scale, nda::max_element(nda::abs(ref)));
-    }
-    return {err, scale};
   }
 
   /// Same quartet with symmetry set s moved to position 0
@@ -451,17 +439,6 @@ namespace {
     return triqs_xca::topology::topology_parity(triqs_xca::topology::fermionic_topology(topology, is_ferm));
   }
 
-  /// max_{t,i,j<n_hyb} |A(t,i,j) - B(t,i,j)| and max|B| over the same window.
-  std::pair<double, double> compare_leading_block(nda::array_const_view<dcomplex, 3> A, nda::array_const_view<dcomplex, 3> B, int n_hyb) {
-    double err = 0.0, scale = 0.0;
-    for (int i = 0; i < n_hyb; ++i)
-      for (int j = 0; j < n_hyb; ++j) {
-        err   = std::max(err, nda::max_element(nda::abs(nda::make_regular(A(nda::range::all, i, j) - B(nda::range::all, i, j)))));
-        scale = std::max(scale, nda::max_element(nda::abs(B(nda::range::all, i, j))));
-      }
-    return {err, scale};
-  }
-
 } // namespace
 
 /**
@@ -494,7 +471,8 @@ TEST(BlockSparseDynintEvaluator, spgf_matches_dense_with_dynamical_interactions)
   auto Fq_ferm = std::get<0>(get_operators(m.ad, m.hyb_coeffs));
   DiagramEvaluator D_ferm(beta, Lambda, eps, m.hyb_poles, m.hyb_coeffs, Fq_ferm);
   int nb = D.get_num_single_ptcle_gf_backbones(topology);
-  ASSERT_GT(nb, D_ferm.get_num_single_ptcle_gf_backbones(topology)) << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
+  ASSERT_GT(nb, D_ferm.get_num_single_ptcle_gf_backbones(topology))
+     << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
   ASSERT_EQ(nb, D_dense.get_num_single_ptcle_gf_backbones(topology)) << "the two evaluators do not enumerate the same backbones";
 
   auto f_ix_vec = nda::array<int, 1>(nb);
@@ -579,7 +557,8 @@ TEST(BlockSparseDynintEvaluator, one_time_correlator_matches_dense_with_dynamica
 
     int nb = D.get_num_single_ptcle_gf_backbones(topology);
     ASSERT_EQ(nb, D_dense.get_num_single_ptcle_gf_backbones(topology)) << "the two evaluators do not enumerate the same backbones";
-    ASSERT_GT(nb, D_ferm.get_num_single_ptcle_gf_backbones(topology)) << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
+    ASSERT_GT(nb, D_ferm.get_num_single_ptcle_gf_backbones(topology))
+       << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
     auto f_ix_vec = nda::array<int, 1>(nb);
     for (int i = 0; i < nb; ++i) f_ix_vec(i) = i;
 
@@ -646,7 +625,8 @@ TEST(BlockSparseDynintEvaluator, self_energy_flat_index_overloads_agree) {
   auto Fq_ferm = std::get<0>(get_operators(m.ad, m.hyb_coeffs));
   DiagramEvaluator D_ferm(beta, Lambda, eps, m.hyb_poles, m.hyb_coeffs, Fq_ferm);
   int nb = D.get_num_self_energy_backbones(topology);
-  ASSERT_GT(nb, D_ferm.get_num_self_energy_backbones(topology)) << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
+  ASSERT_GT(nb, D_ferm.get_num_self_energy_backbones(topology))
+     << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
 
   auto f_ix_vec = nda::array<int, 1>(nb);
   for (int i = 0; i < nb; ++i) f_ix_vec(i) = i;
@@ -696,7 +676,8 @@ TEST(BlockSparseDynintEvaluator, spgf_flat_index_overloads_agree) {
   auto Fq_ferm = std::get<0>(get_operators(m.ad, m.hyb_coeffs));
   DiagramEvaluator D_ferm(beta, Lambda, eps, m.hyb_poles, m.hyb_coeffs, Fq_ferm);
   int n_backbones = D.get_num_single_ptcle_gf_backbones(topology);
-  ASSERT_GT(n_backbones, D_ferm.get_num_single_ptcle_gf_backbones(topology)) << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
+  ASSERT_GT(n_backbones, D_ferm.get_num_single_ptcle_gf_backbones(topology))
+     << "vacuous test: the interaction flavour is not in the backbone enumeration (this compares two evaluators, so it asserts n_ext > n_hyb rather than that any particular backbone puts the interaction on an internal line)";
 
   // Route 1: sums every backbone internally
   auto spgf_all = D.compute_single_ptcle_gf(G, topology);
@@ -734,4 +715,80 @@ TEST(BlockSparseDynintEvaluator, spgf_flat_index_overloads_agree) {
 
   EXPECT_LE(nda::max_element(nda::abs(spgf_all - spgf_single)), 1.0e-12)
      << "max|spgf| = " << scale << ": compute_single_ptcle_gf(G, topology, f_ix) disagrees with compute_single_ptcle_gf(G, topology). Same cause.";
+}
+
+/**
+ * @brief Compare Sigma and the spgf to the dense evaluator on the interleaved spin-flip model with a dimension-4 subspace
+ *
+ * @details The other comparisons in this file run on unequal_sym_set_model, with a largest subspace of dimension 2 and contiguous labels.
+ * The spin-flip model with autopartitioning has 9 subspaces including one of dimension 4, interleaved symmetry-set labels {0,1,0,1}, and a
+ * dynint symmetry set of size 2, since n_up0 and n_do0 share a connection row.
+ */
+TEST(BlockSparseDynintEvaluator, matches_dense_on_the_interleaved_deep_subspace_model) {
+  auto ad      = spin_flip_atom_diag_helper(2, false);
+  auto ad_flat = spin_flip_atom_diag_helper_single_subspace(2);
+  assert_parallel_atom_diags(ad, ad_flat);
+
+  int n_hyb     = static_cast<int>(ad.get_fops().size());
+  auto labels_f = std::get<1>(get_operators(ad, nda::zeros<dcomplex>(p_poles, n_hyb, n_hyb)));
+  auto hyb      = sym_set_diagonal_hyb(labels_f, p_poles);
+
+  // two density operators on the same orbital share a connection row, hence one dynint set of size 2
+  std::vector<many_body_operator_real> ops{n("up", 0), n("do", 0)};
+  int n_int = static_cast<int>(ops.size());
+  auto d    = nda::zeros<dcomplex>(p_poles, n_int, n_int);
+  for (int l = 0; l < p_poles; ++l)
+    for (int i = 0; i < n_int; ++i) d(l, i, i) = 0.53 - 0.06 * l + 0.04 * i;
+
+  nda::vector<double> hyb_poles = {1.3, -0.8};
+  auto [Fq, labels]             = get_operators_and_interactions(ad, hyb, d, ops);
+  auto ext                      = get_extended_coefficients(hyb, d);
+
+  ASSERT_EQ(nda::max_element(Fq.sym_set_sizes), 2) << "every symmetry set is a singleton: the within-set contraction is not exercised";
+  ASSERT_EQ(Fq.sym_set_sizes(nda::max_element(Fq.sym_set_labels)), 2)
+     << "the dynint operators did not land in one shared set of size 2, so this test duplicates dynint_model. "
+        "sym_set_sizes = "
+     << Fq.sym_set_sizes;
+  {
+    auto lab = nda::vector<long>(labels_f);
+    std::sort(lab.begin(), lab.end());
+    bool interleaved = !std::equal(lab.begin(), lab.end(), labels_f.begin());
+    ASSERT_TRUE(interleaved) << "vacuous test: the fermionic labels " << labels_f
+                             << " are already sorted, so set-major and "
+                                "orbital order coincide and an ordering bug would be invisible";
+  }
+
+  auto itops = imtime_ops(Lambda, build_dlr_rf(Lambda, eps));
+  auto Gt    = ad_to_atom_prop(ad, beta, itops);
+  DiagramEvaluator D(beta, Lambda, eps, hyb_poles, ext, Fq, n_int);
+
+  auto G_flat = ad_to_atom_prop(ad_flat, beta, Lambda, eps);
+  DenseDiagramEvaluator D_dense(hyb_poles, hyb, G_flat[0].mesh(), ad_flat, ops, d);
+
+  int max_dim = 0;
+  for (auto dim : ad.get_subspace_dims()) max_dim = std::max(max_dim, static_cast<int>(dim));
+  ASSERT_GE(max_dim, 4) << "vacuous test: this fixture is supposed to be the deep-subspace one, got max dim " << max_dim;
+  ASSERT_EQ(D.Nmax, max_dim);
+
+  nda::array<int, 2> topology = {{0, 2}, {1, 3}};
+  ASSERT_EQ(triqs_xca::topology::topology_parity(topology), -1) << "vacuous test: topology is not crossing";
+
+  // Sigma, per block, through the basis bridge.
+  {
+    SCOPED_TRACE("self-energy");
+    auto Sigma        = BlockDiagOpFun(D.compute_self_energy(Gt, topology));
+    auto Sigma_dense  = D_dense.compute_self_energy(G_flat, topology);
+    auto [err, scale] = compare_sigma_with_dense(Sigma, Sigma_dense, ad);
+    ASSERT_GT(scale, 0.01) << "vacuous test: the self-energy is too small for an absolute tolerance";
+    EXPECT_LE(err, sigma_tol * std::max(1.0, scale)) << "max|Sigma_dense| = " << scale << ", max|bs - dense| = " << err;
+  }
+
+  // spgf, a trace quantity without bridge, compared on the leading n_hyb window since the dense side emits all n_ext legs
+  {
+    SCOPED_TRACE("single-particle Green's function");
+    auto spgf_dense   = D_dense.compute_single_ptcle_gf(G_flat, topology);
+    auto [err, scale] = compare_leading_block(D.compute_single_ptcle_gf(Gt, topology), spgf_dense, n_hyb);
+    ASSERT_GT(scale, 1.0e-3) << "vacuous test: the spgf is too small to compare";
+    EXPECT_LE(err, sigma_tol * std::max(1.0, scale)) << "max|spgf_dense| = " << scale << ", max|bs - dense| = " << err;
+  }
 }

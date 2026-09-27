@@ -14,6 +14,22 @@ extern template triqs_xca::block_sparse::DiagramEvaluator::DiagramEvaluator(
   nda::vector_const_view<double>, nda::array_const_view<dcomplex, 3>,
   triqs::mesh::dlr_imtime, triqs::atom_diag::atom_diag<false> const &);
 
+// -- Dynamic interaction constructor
+//
+// clair-c2py binds the constructor overloads declared as extern templates in this file, not those in the header
+
+extern template triqs_xca::block_sparse::DiagramEvaluator::DiagramEvaluator(
+  nda::vector_const_view<double>, nda::array_const_view<dcomplex, 3>,
+  triqs::mesh::dlr_imtime, triqs::atom_diag::atom_diag<true> const &,
+  std::vector<triqs::operators::many_body_operator_real> const &,
+  nda::array_const_view<dcomplex, 3>);
+
+extern template triqs_xca::block_sparse::DiagramEvaluator::DiagramEvaluator(
+  nda::vector_const_view<double>, nda::array_const_view<dcomplex, 3>,
+  triqs::mesh::dlr_imtime, triqs::atom_diag::atom_diag<false> const &,
+  std::vector<triqs::operators::many_body_operator_real> const &,
+  nda::array_const_view<dcomplex, 3>);
+
 extern template
 nda::array<dcomplex, 3> triqs_xca::block_sparse::DiagramEvaluator::compute_one_time_correlator<true>(
     triqs::gfs::block_gf_view<triqs::mesh::dlr_imtime>,
