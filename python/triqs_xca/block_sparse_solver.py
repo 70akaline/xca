@@ -76,7 +76,7 @@ class BlockSparseSolver(object):
 
     # floor and eps multiplier of the relative slack on the DLR window, see pole_window_slack
     pole_window_slack_floor = 1e-9
-    pole_window_slack_per_eps = 10.0
+    pole_window_slack_per_eps = 50.0
 
     def __init__(self, H_loc, beta, w_max, eps, gf_struct, 
                  conserved_operators='automatic', dlr_symmetrize=False,
