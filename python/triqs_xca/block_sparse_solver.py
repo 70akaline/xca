@@ -202,13 +202,23 @@ class BlockSparseSolver(object):
 
         # a large residual means the discarded pole was load-bearing
         if residual > max(10 * fit_error, tol):
+            omega_out = np.asarray(poles)[outside]
+            beta_omega_out = beta_omega[outside]
+            overshoot_out = np.abs(beta_omega_out) / Lambda - 1
+            weight_out = np.abs(np.asarray(pole_weights)[outside]).reshape(len(omega_out), -1).max(axis=1)
+            pole_info = ', '.join(
+                f'omega={om:2.8E} (|beta*omega|={bw:2.8E}, overshoot={ov:2.3E} rel. to Lambda, '
+                f'residue abs-max={w:2.2E})'
+                for om, bw, ov, w in zip(omega_out, beta_omega_out, overshoot_out, weight_out))
             raise RuntimeError(
                 f'Hybridization compression: dropping {len(poles) - n_keep} out-of-window pole(s) '
                 f'changed the hybridization by {residual:2.2E} pointwise, above both 10x the fit '
                 f'error ({10 * fit_error:2.2E}) and tol ({tol:2.2E}). The discarded pole carried '
-                f'real weight, so it is likely physics this DLR window cannot represent. If the '
-                f'pole sits AT the window edge, raise eps or w_max so the fit resolves it; '
-                f'otherwise widen w_max, or re-run with hyb_comp=False.')
+                f'real weight, so it is likely physics this DLR window cannot represent. '
+                f'w_max = {self.mesh_tau.w_max:2.4E}, Lambda = beta*w_max = {Lambda:2.2E}, '
+                f'eps = {self.mesh_tau.eps:2.2E}, pole_window_slack = {self.pole_window_slack:2.2E}; '
+                f'dropped pole(s): {pole_info}. If the pole sits AT the window edge, raise eps or '
+                f'w_max so the fit resolves it; otherwise widen w_max, or re-run with hyb_comp=False.')
 
         if is_root():
             print(f'Adapol: WARNING! {len(poles) - n_keep} of {len(poles)} poles outside the DLR '
