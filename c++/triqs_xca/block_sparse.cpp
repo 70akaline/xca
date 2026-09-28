@@ -212,7 +212,7 @@ namespace triqs_xca::block_sparse {
 
   nda::array_const_view<dcomplex, 2> BlockOp::get_block(int i) const {
     if (block_indices(i) == -1) {
-      auto arr = nda::zeros<dcomplex>(1, 1);
+      static const auto arr = nda::zeros<dcomplex>(1, 1);
       return arr;
     } else {
       return blocks[i];
@@ -418,7 +418,7 @@ namespace triqs_xca::block_sparse {
 
   nda::array_const_view<dcomplex, 4> BlockOpSymSetBar::get_block(int i) const {
     if (block_indices(i) == -1) {
-      auto arr = nda::zeros<dcomplex>(1, 1, 1, 1);
+      static const auto arr = nda::zeros<dcomplex>(1, 1, 1, 1);
       return arr;
     } else {
       return blocks[i];
