@@ -430,13 +430,22 @@ class _ReversedPoleSolver(BlockSparseSolver):
             self.dynint_coeffs = np.ascontiguousarray(np.asarray(self.dynint_coeffs)[::-1])
 
 
+def _dlr_window_slack(eps):
+
+    """ Relative slack on the DLR window that adapol allows for a pole physically at w_max, mirrors
+    adapol.triqs._dlr_window_slack. If adapol changes it, the window asserts below fail loudly. """
+
+    return max(1e-9, 50.0 * eps)
+
+
 def test_dynint_hyb_comp_pole_window(verbose=False):
 
     """ The compressed pole set must stay inside the DLR window.
 
-    adapol's pole locations are unconstrained, and a pole at |beta*omega| > Lambda is not representable
-    in a DLR basis built for Lambda, so every vals2coefs round trip silently loses it. The bound is
-    Lambda itself, since the uncompressed DLR fallback reaches 0.9995 * Lambda. """
+    The AAA pole locations are unconstrained, and a pole at |beta*omega| > Lambda is not representable
+    in a DLR basis built for Lambda, so every vals2coefs round trip silently loses it. adapol's
+    approx_gf_dlr_tol drops such poles and refits. The bound is Lambda itself, since the uncompressed
+    DLR fallback reaches 0.9995 * Lambda. """
 
     S, mu = make_solver()
     beta = S.mesh_tau.beta
@@ -453,7 +462,7 @@ def test_dynint_hyb_comp_pole_window(verbose=False):
         f'vacuous: adapol did not produce a fit (fit_error = {S.hyb.fit_error})'
     assert len(bw) == 2, \
         f'vacuous: expected the 3-pole adapol fit to be filtered to 2, got {len(bw)} poles -- ' \
-        f'either compression was skipped or the filter did not fire'
+        f'either compression was skipped or the adapol DLR window filter did not fire'
 
     if verbose:
         print(f'pole window: max|beta*omega| = {worst:2.4E}  Lambda = {Lambda:2.4E}  '
@@ -467,18 +476,18 @@ def test_dynint_hyb_comp_pole_window(verbose=False):
 
 def test_dynint_hyb_comp_edge_pole_survives(verbose=False):
 
-    """ A physical pole sitting exactly on the window edge must survive the filter.
+    """ A physical pole sitting exactly on the window edge must survive adapol's DLR window filter.
 
-    adapol's pole locations are not exact, so a mode at w_max comes back slightly outside the window,
-    by up to 3e-09 relative over the configurations measured, while the smallest artefact overshoot
-    measured is 1.8e-03, and pole_window_slack sits between them. omega0 == w_max is the natural
-    choice for the mode frequency. """
+    adapol's pole locations are not exact, so a mode at w_max may come back slightly outside the
+    window, while the smallest artefact overshoot measured is 1.8e-03, and the slack of the filter
+    sits between them. omega0 == w_max is the natural choice for the mode frequency. """
 
-    # eps is swept since the physical overshoot tracks the basis accuracy nearly linearly, so a fixed slack fails at one end
+    # eps is swept to check that the slack holds for both loose and tight DLR accuracy
     for beta, w_max, eps in ((2.1, 1.0, 1e-12), (1.0, 1.0, 1e-6), (2.1, 0.5, 1e-6),
                              (0.3, 1.0, 1e-8), (5.0, 2.0, 1e-10)):
         S, mu = make_solver(beta=beta, w_max=w_max, omega0=w_max, eps=eps)
         Lambda = beta * w_max
+        slack = _dlr_window_slack(eps)
         S.fit_hybridization(tol=1e-9, compression=True, verbose=False)
 
         bw = beta * np.asarray(S.hyb.poles)
@@ -486,19 +495,19 @@ def test_dynint_hyb_comp_edge_pole_survives(verbose=False):
         dominant = weight > 0.5 * weight.max()
 
         if verbose:
-            print(f'edge pole: beta={beta} w_max={w_max} eps={eps:.0e} slack={S.pole_window_slack:.1e} '
+            print(f'edge pole: beta={beta} w_max={w_max} eps={eps:.0e} slack={slack:.1e} '
                   f'n_poles={len(bw)} max_ratio={np.max(np.abs(bw)) / Lambda:.12f} '
                   f'rel_weight={np.sort(weight / weight.max())}')
 
         assert len(bw) >= 2, \
             f'beta={beta}, w_max={w_max}, eps={eps:.0e}: the filter left {len(bw)} pole(s). The ' \
-            f'physical mode is AT the window edge and must survive -- pole_window_slack ' \
-            f'({S.pole_window_slack:.1e}) is too tight.'
+            f'physical mode is AT the window edge and must survive -- the window slack ' \
+            f'({slack:.1e}) is too tight.'
         assert np.sum(dominant) >= 2, \
             f'beta={beta}, w_max={w_max}, eps={eps:.0e}: only {np.sum(dominant)} dominant pole(s) ' \
             f'survived; the +-omega0 pair carries the physics and both must be kept'
         # the survivors are inside the window to within the slack
-        assert np.max(np.abs(bw)) <= Lambda * (1 + S.pole_window_slack), \
+        assert np.max(np.abs(bw)) <= Lambda * (1 + slack), \
             f'beta={beta}, w_max={w_max}, eps={eps:.0e}: a pole at ratio ' \
             f'{np.max(np.abs(bw)) / Lambda:.12f} survived the filter'
 
