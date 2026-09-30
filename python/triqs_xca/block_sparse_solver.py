@@ -7,6 +7,7 @@ import triqs.utility.mpi as mpi
 
 from triqs.gfs import Gf, MeshDLRImTime, BlockGf, make_gf_dlr, make_gf_dlr_imfreq
 from triqs.atom_diag import AtomDiag, AtomDiagReal, AtomDiagComplex
+from triqs.operators import Operator
 
 from .diag import all_pairings, all_connected_pairings
 
@@ -251,16 +252,64 @@ class BlockSparseSolver(object):
 
 
     def set_dynamic_interactions(self, dynint_ops, dynint_tau):
+        """ Set retarded (dynamical) interactions of the impurity problem.
 
-        assert( dynint_tau.mesh.beta == self.mesh_tau.beta )
-        assert( dynint_tau.mesh.w_max <= self.mesh_tau.w_max )
-        assert( dynint_tau.mesh.eps >= self.mesh_tau.eps )
+        The interactions enter the impurity action as the term
+
+        .. math::
+            \\iint_0^\\beta d\\tau d\\tau' \\sum_{ij} O_i^\\dagger(\\tau) \\, D_{ij}(\\tau - \\tau') \\, O_j(\\tau')
+
+        where :math:`O_i` are the operators in ``dynint_ops`` and :math:`D_{ij}(\\tau)` is the kernel ``dynint_tau``.
+        The retarded interaction lines are expanded on the same footing as the hybridization lines,
+        i.e. the expansion order ``max_order`` of ``solve()`` counts both kinds of lines.
+
+        Parameters
+        ----------
+        dynint_ops : list or tuple of triqs.operators.Operator
+            Local many-body operators :math:`O_i` coupled by the retarded interaction,
+            e.g. ``[n('up', 0)]`` for a density-density interaction.
+            Each operator has to map every ``atom_diag`` subspace to at most one subspace.
+        dynint_tau : triqs.gfs.Gf
+            Retarded interaction kernel :math:`D_{ij}(\\tau)` with target shape ``[len(dynint_ops)]*2``,
+            on a DLR imaginary time mesh (``MeshDLRImTime``) of either statistic, with the same ``beta``
+            as the solver, ``w_max`` smaller than or equal to, and ``eps`` larger than or equal to those of the solver.
+            If the mesh differs from the solver mesh ``mesh_tau``, the kernel is interpolated onto ``mesh_tau``.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+
+        The action term has no prefactor :math:`\\frac{1}{2}`. A density-density interaction written as
+        :math:`\\frac{1}{2} \\iint d\\tau d\\tau' \\, n(\\tau) \\mathcal{U}(\\tau - \\tau') n(\\tau')`
+        is therefore set with ``dynint_ops=[n]`` and ``dynint_tau`` equal to :math:`\\frac{1}{2} \\mathcal{U}(\\tau)`.
+
+        The interaction kernel is fitted together with the hybridization function when calling ``solve()``,
+        so this method has to be called before ``solve()``. Calling it again replaces the previously set interactions.
+
+        See the tutorial on the one-boson retarded interaction for a complete example.
+
+        """
+
+        assert( isinstance(dynint_ops, (list, tuple)) ), 'Error: dynint_ops must be a list or tuple'
+        assert( all(isinstance(op, Operator) for op in dynint_ops) ), 'Error: dynint_ops elements must be triqs.operators.Operator instances'
+        n_int = len(dynint_ops)
+        assert( list(dynint_tau.target_shape) == [n_int, n_int] ), \
+            f'Error: dynint_tau target_shape {list(dynint_tau.target_shape)} must be [{n_int}, {n_int}] to match len(dynint_ops)'
 
         self.has_dynamic_interactions = True
-        self.dynint_ops = dynint_ops
+        self.dynint_ops = list(dynint_ops)
 
         # Reinterpolate dynint_tau onto the solver mesh_tau if necessary
+
         if dynint_tau.mesh != self.mesh_tau:
+
+            assert( dynint_tau.mesh.beta == self.mesh_tau.beta )
+            assert( dynint_tau.mesh.w_max <= self.mesh_tau.w_max )
+            assert( dynint_tau.mesh.eps >= self.mesh_tau.eps )
+
             dynint_dlr = make_gf_dlr(dynint_tau)
             dynint_tau_new = Gf(mesh=self.mesh_tau, target_shape=dynint_tau.target_shape)
 

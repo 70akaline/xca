@@ -66,13 +66,8 @@ const std::string c2py::tp_ctor_doc<_c2py_cls_0> = _c2py_init_0.doc(
 
 [3, 4] Constructor for DiagramEvaluator with dynamical interactions
 
-The interaction operators extend the flavour space: they become extra orbital indices
-[n_hyb, n_hyb + n_int), grouped into their own symmetry sets, and the coefficients are extended
-block-diagonally. Statistics then enters only through the fermionic permutation parity, which
-classifies a vertex as bosonic when its orbital index is >= n_hyb.
-
-Note hyb_coeffs must cover every fundamental operator of ad: unlike the plain constructor, which
-tolerates a hyb_coeffs covering only the first few, this one throws otherwise.
+The interaction operators extend the flavour space as the orbital indices [n_hyb, n_hyb + n_int), grouped into their own
+symmetry sets, and the coefficients are extended block-diagonally. hyb_coeffs must cover every fundamental operator of ad.
 
 ------
 
